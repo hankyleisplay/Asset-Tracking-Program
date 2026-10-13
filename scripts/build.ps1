@@ -8,6 +8,7 @@ if (-not (Test-Path "node_modules")) {
     npm install
 }
 
+$env:CARGO_INCREMENTAL = "0"
 Write-Host "開始編譯生產版本 (Release Build)..." -ForegroundColor Green
 npx tauri build
 

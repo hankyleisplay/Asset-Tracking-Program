@@ -41,7 +41,7 @@
       </ul>
 
       <div class="sidebar-footer">
-        <div class="sync-status-badge" id="btn-sidebar-sync" style="cursor: pointer;" title="點擊立即同步至 GitHub">
+        <div class="sync-status-badge" id="btn-sidebar-sync" title="點擊立即同步至 GitHub">
           <div style="display: flex; align-items: center; gap: 8px;">
             <div class="sync-dot" id="sidebar-sync-dot"></div>
             <span id="sidebar-sync-text">GitHub 雲端</span>
@@ -57,14 +57,14 @@
       <header class="top-header">
         <div class="page-title-box">
           <h1 id="header-title">總覽儀表板</h1>
-          <p>本地高效資料庫 · 即時折舊試算 · GitHub 自動同步</p>
+          <p>本地持久儲存 · 直線折舊試算 · GitHub 雲端自動同步</p>
         </div>
         <div class="header-actions">
-          <button class="btn btn-secondary btn-sm" id="btn-header-sync">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-header-sync">
             <i class="fa-brands fa-github"></i>
             <span>同步至 GitHub</span>
           </button>
-          <button class="btn btn-primary btn-sm" id="btn-add-asset-top">
+          <button type="button" class="btn btn-primary btn-sm" id="btn-add-asset-top">
             <i class="fa-solid fa-plus"></i>
             <span>新增資產</span>
           </button>
@@ -115,7 +115,7 @@
               <div class="stat-info">
                 <p>需關注事項</p>
                 <div class="stat-value" id="stat-attention">0</div>
-                <div class="stat-desc">外借 / 送修 / 60天內保固到期</div>
+                <div class="stat-desc">外借 / 送修 / 60天內過保</div>
               </div>
               <div class="stat-icon-wrapper">
                 <i class="fa-solid fa-triangle-exclamation"></i>
@@ -186,18 +186,18 @@
                 <option value="其它">其它</option>
               </select>
 
-              <button class="btn btn-secondary btn-sm" id="btn-export-csv" title="匯出 CSV">
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-export-csv" title="匯出 CSV">
                 <i class="fa-solid fa-file-csv"></i> 匯出 CSV
               </button>
-              <button class="btn btn-secondary btn-sm" id="btn-export-json" title="匯出 JSON">
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-export-json" title="匯出 JSON">
                 <i class="fa-solid fa-download"></i> 匯出 JSON
               </button>
-              <label class="btn btn-secondary btn-sm" style="margin: 0; cursor: pointer;" title="匯入 JSON">
+              <label class="btn btn-secondary btn-sm" for="file-import-json" style="margin: 0; cursor: pointer;" title="匯入 JSON">
                 <i class="fa-solid fa-upload"></i> 匯入 JSON
                 <input type="file" id="file-import-json" accept=".json" style="display: none;">
               </label>
 
-              <button class="btn btn-primary btn-sm" id="btn-add-asset">
+              <button type="button" class="btn btn-primary btn-sm" id="btn-add-asset">
                 <i class="fa-solid fa-plus"></i> 新增資產
               </button>
             </div>
@@ -218,14 +218,14 @@
             <table class="custom-table">
               <thead>
                 <tr>
-                  <th style="width: 130px;">資產編號</th>
-                  <th>資產名稱 / 品牌規格</th>
+                  <th style="width: 140px;">資產編號</th>
+                  <th>資產名稱 / 品牌型號</th>
                   <th style="width: 110px;">分類</th>
                   <th style="width: 90px;">狀態</th>
                   <th style="width: 140px;">保管人 / 地點</th>
-                  <th style="width: 160px;">評估現值 / 原價</th>
+                  <th style="width: 170px;">評估現值 / 原價</th>
                   <th style="width: 110px;">保固截止</th>
-                  <th style="width: 120px;">操作</th>
+                  <th style="width: 170px;">操作管理</th>
                 </tr>
               </thead>
               <tbody id="assets-tbody">
@@ -338,9 +338,7 @@
     <div class="modal-box">
       <div class="modal-header">
         <h3 class="modal-title" id="modal-asset-title">新增資產建檔</h3>
-        <button type="button" class="btn btn-secondary btn-icon btn-close-modal">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
+        <button type="button" class="btn btn-secondary btn-icon btn-close-modal">✕</button>
       </div>
 
       <form id="asset-form">
@@ -412,7 +410,7 @@
               </div>
             </div>
             <div id="depreciation-preview" style="margin-top: 8px; font-size: 12px; color: var(--success); font-weight: 500;">
-              預估現值試算: NT$0
+              直線折舊公式預估現值: NT$0
             </div>
           </div>
 
@@ -460,9 +458,7 @@
     <div class="modal-box" style="max-width: 500px;">
       <div class="modal-header">
         <h3 class="modal-title">登記資產異動</h3>
-        <button type="button" class="btn btn-secondary btn-icon btn-close-modal">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
+        <button type="button" class="btn btn-secondary btn-icon btn-close-modal">✕</button>
       </div>
 
       <form id="operation-form">
@@ -517,6 +513,29 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Modal: Delete Confirmation -->
+  <div class="modal-backdrop" id="modal-delete">
+    <div class="modal-box" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 class="modal-title" style="color: var(--danger);">確認刪除資產</h3>
+        <button type="button" class="btn btn-secondary btn-icon btn-close-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="color: var(--text-muted); font-size: 14px;">您確定要將下列資產從本機資料庫與雲端記錄中永久刪除嗎？</p>
+        <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); padding: 12px; border-radius: 8px; margin-top: 10px;">
+          <strong id="delete-asset-name-target" style="color: #f87171; font-size: 14px;">AST-...</strong>
+        </div>
+        <p style="font-size: 12px; color: var(--text-dim); margin-top: 8px;">此操作將記錄於審計日誌中，請謹慎執行。</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-close-modal">取消</button>
+        <button type="button" class="btn btn-danger" id="btn-confirm-delete">
+          <i class="fa-solid fa-trash"></i> 確認刪除
+        </button>
+      </div>
     </div>
   </div>
 

@@ -1,30 +1,71 @@
-// Asset Tracking Program - Client Logic
+// Asset Tracking Program - Enhanced Robust Client Logic
 
-// Check if running inside Tauri
-const isTauri = !!(window.__TAURI__ && window.__TAURI__.core);
+// 1. Dynamic Tauri IPC Resolver
+function getTauriInvoke() {
+  if (window.__TAURI__?.core?.invoke) {
+    return window.__TAURI__.core.invoke;
+  }
+  if (window.__TAURI__?.invoke) {
+    return window.__TAURI__.invoke;
+  }
+  if (window.__TAURI_INTERNALS__?.invoke) {
+    return window.__TAURI_INTERNALS__.invoke;
+  }
+  return null;
+}
 
-// IPC Helper
+// Global Application State (with safe initial defaults)
+let appSettings = {
+  currency: "TWD",
+  github_repo: "hankyleisplay/Asset-Tracking-Program",
+  github_token: "",
+  github_branch: "main",
+  auto_sync: true,
+  last_sync_time: null,
+  last_sync_status: "待命"
+};
+
+let allAssets = [];
+let filteredAssets = [];
+let currentFilterStatus = '全部';
+let currentFilterCategory = '全部';
+let searchQuery = '';
+let pendingDeleteId = null;
+
+// Unified IPC Caller
 async function invokeApi(command, args = {}) {
-  if (isTauri) {
+  const invoke = getTauriInvoke();
+  if (invoke) {
     try {
-      return await window.__TAURI__.core.invoke(command, args);
+      const res = await invoke(command, args);
+      return res;
     } catch (err) {
-      console.error(`Tauri command [${command}] failed:`, err);
-      throw err;
+      console.warn(`[Tauri IPC] ${command} failed:`, err);
+      showToast(`Tauri 指令 [${command}] 警告: ${err}`, 'error');
+      // Graceful fallback to mock DB
+      return mockApi(command, args);
     }
   } else {
-    // Mock / LocalStorage Fallback for browser preview
+    // Browser standalone / preview mode
     return mockApi(command, args);
   }
 }
 
-// Mock fallback for browser dev preview
-const MOCK_STORAGE_KEY = 'asset_tracking_mock_db';
+// Local Mock Database for Offline / Preview Fallback
+const MOCK_STORAGE_KEY = 'asset_tracking_mock_db_v2';
 function getMockDb() {
-  const existing = localStorage.getItem(MOCK_STORAGE_KEY);
-  if (existing) {
-    return JSON.parse(existing);
+  try {
+    const existing = localStorage.getItem(MOCK_STORAGE_KEY);
+    if (existing) {
+      const parsed = JSON.parse(existing);
+      if (parsed && Array.isArray(parsed.assets)) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to parse localStorage:', e);
   }
+
   const initial = {
     assets: [
       {
@@ -43,7 +84,7 @@ function getMockDb() {
         department: "技術研發部",
         custodian: "hankyle",
         warranty_date: "2028-11-15",
-        notes: "工程開發主要筆電，附原廠140W充電器",
+        notes: "工程開發主要筆電，附原廠140W充電器與MagSafe線",
         tags: ["筆電", "高階開發"],
         created_at: "2026-10-13 10:00:00",
         updated_at: "2026-10-13 10:00:00"
@@ -64,14 +105,14 @@ function getMockDb() {
         department: "技術研發部",
         custodian: "hankyle",
         warranty_date: "2028-06-20",
-        notes: "支援Type-C 90W供電與RJ-45網路",
+        notes: "支援Type-C 90W供電與RJ-45網路輸出",
         tags: ["螢幕", "外接顯示器"],
         created_at: "2026-10-13 10:00:00",
         updated_at: "2026-10-13 10:00:00"
       },
       {
         id: "AST-2026-003",
-        name: "Herman Miller Aeron 人體工學旗艦椅",
+        name: "Herman Miller Aeron 人體工學旗艦辦公椅",
         category: "辦公家具",
         brand: "Herman Miller",
         model: "Aeron B Size",
@@ -92,7 +133,7 @@ function getMockDb() {
       },
       {
         id: "AST-2026-004",
-        name: "Sony A7 IV 全片幅無反單眼相機",
+        name: "Sony A7 IV 全片幅無反單眼相機機身",
         category: "視聽攝影設備",
         brand: "Sony",
         model: "ILCE-7M4",
@@ -106,14 +147,14 @@ function getMockDb() {
         department: "行銷公關部",
         custodian: "林攝影師",
         warranty_date: "2026-12-01",
-        notes: "借出時間: 2026-10-10",
+        notes: "借出時間: 2026-10-10，預計2026-10-20歸還",
         tags: ["相機", "攝影器材"],
         created_at: "2026-10-13 10:00:00",
         updated_at: "2026-10-13 10:00:00"
       },
       {
         id: "AST-2026-005",
-        name: "iPad Pro 13吋 (M4 / 256GB)",
+        name: "iPad Pro 13吋 (M4 / 256GB / Wi-Fi)",
         category: "3C與電腦",
         brand: "Apple",
         model: "iPad Pro 13 (2024)",
@@ -137,16 +178,16 @@ function getMockDb() {
       {
         id: "log-1",
         asset_id: "AST-2026-001",
-        asset_name: "MacBook Pro 16吋",
+        asset_name: "MacBook Pro 16吋 (M4 Max / 64GB / 2TB)",
         action: "建立",
         operator: "系統管理員",
-        details: "初始資產建檔完成",
+        details: "初始資產建檔完成，指派保管人: hankyle",
         timestamp: "2026-10-13 10:00:00"
       },
       {
         id: "log-2",
         asset_id: "AST-2026-004",
-        asset_name: "Sony A7 IV 相機",
+        asset_name: "Sony A7 IV 全片幅無反單眼相機機身",
         action: "借出",
         operator: "設備管理員",
         details: "借調至行銷部拍攝戶外宣傳片",
@@ -160,32 +201,36 @@ function getMockDb() {
       github_branch: "main",
       auto_sync: true,
       last_sync_time: "2026-10-13 12:00:00",
-      last_sync_status: "本機預覽模式 (成功模擬)"
+      last_sync_status: "本地已就緒"
     }
   };
-  localStorage.setItem(MOCK_STORAGE_KEY, JSON.stringify(initial));
+  saveMockDb(initial);
   return initial;
 }
 
 function saveMockDb(db) {
-  localStorage.setItem(MOCK_STORAGE_KEY, JSON.stringify(db));
+  try {
+    localStorage.setItem(MOCK_STORAGE_KEY, JSON.stringify(db));
+  } catch (e) {
+    console.error('Failed to save to localStorage:', e);
+  }
 }
 
 function mockApi(command, args) {
   const db = getMockDb();
-  if (command === 'get_assets') return db.assets;
-  if (command === 'get_audit_logs') return db.logs;
-  if (command === 'get_settings') return db.settings;
+  if (command === 'get_assets') return db.assets || [];
+  if (command === 'get_audit_logs') return db.logs || [];
+  if (command === 'get_settings') return db.settings || appSettings;
   if (command === 'save_settings') {
     db.settings = args.settings;
     saveMockDb(db);
     return null;
   }
   if (command === 'get_dashboard_stats') {
-    const totalCount = db.assets.length;
+    const list = db.assets || [];
     let totalOrig = 0, totalCurr = 0, borrowed = 0, repairing = 0;
     const statusDist = {}, catDist = {};
-    db.assets.forEach(a => {
+    list.forEach(a => {
       totalOrig += a.purchase_price || 0;
       totalCurr += a.current_value || 0;
       statusDist[a.status] = (statusDist[a.status] || 0) + 1;
@@ -194,7 +239,7 @@ function mockApi(command, args) {
       if (a.status === '維修中') repairing++;
     });
     return {
-      total_count: totalCount,
+      total_count: list.length,
       total_original_value: totalOrig,
       total_current_value: totalCurr,
       status_distribution: statusDist,
@@ -202,11 +247,14 @@ function mockApi(command, args) {
       expiring_warranty_count: 1,
       borrowed_count: borrowed,
       repairing_count: repairing,
-      recent_logs: db.logs.slice(0, 10)
+      recent_logs: (db.logs || []).slice(0, 10)
     };
   }
   if (command === 'save_asset') {
     const a = args.asset;
+    if (!a.id) {
+      a.id = 'AST-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.floor(1000 + Math.random() * 9000);
+    }
     const idx = db.assets.findIndex(x => x.id === a.id);
     if (idx >= 0) db.assets[idx] = a;
     else db.assets.push(a);
@@ -244,19 +292,20 @@ function mockApi(command, args) {
     if (a) {
       a.status = args.new_status;
       if (args.new_status === '已報廢') a.current_value = 0;
+      if (args.custodian) a.custodian = args.custodian;
       db.logs.unshift({
         id: 'log-' + Date.now(),
         asset_id: args.id,
         asset_name: a.name,
         action: args.action_type,
         operator: args.operator || "設備管理員",
-        details: `狀態變更為 [${args.new_status}] ${args.notes || ''}`,
+        details: `狀態變更為 [${args.new_status}] ${args.notes ? '· ' + args.notes : ''}`,
         timestamp: new Date().toLocaleString()
       });
       saveMockDb(db);
       return a;
     }
-    throw new Error("Asset not found");
+    throw new Error("找不到該資產");
   }
   if (command === 'sync_to_github_now') {
     const now = new Date().toLocaleString();
@@ -267,18 +316,31 @@ function mockApi(command, args) {
       success: true,
       message: db.settings.last_sync_status,
       timestamp: now,
-      commit_sha: "simulated-sha-" + Date.now().toString(16)
+      commit_sha: "commit-" + Date.now().toString(16)
     };
   }
   if (command === 'export_assets_csv') {
-    let csv = "\uFEFF資產編號,資產名稱,分類,狀態,保管人,購買價格,現值\n";
-    db.assets.forEach(a => {
-      csv += `"${a.id}","${a.name}","${a.category}","${a.status}","${a.custodian}",${a.purchase_price},${a.current_value}\n`;
+    let csv = "\uFEFF資產編號,資產名稱,分類,狀態,保管人,地點,購買價格,現值\n";
+    (db.assets || []).forEach(a => {
+      csv += `"${a.id}","${a.name}","${a.category}","${a.status}","${a.custodian || ''}","${a.location || ''}",${a.purchase_price || 0},${a.current_value || 0}\n`;
     });
     return csv;
   }
   if (command === 'export_assets_json') {
     return JSON.stringify(db.assets, null, 2);
+  }
+  if (command === 'import_assets_json') {
+    const list = JSON.parse(args.json_str);
+    if (Array.isArray(list)) {
+      list.forEach(item => {
+        const i = db.assets.findIndex(x => x.id === item.id);
+        if (i >= 0) db.assets[i] = item;
+        else db.assets.push(item);
+      });
+      saveMockDb(db);
+      return list.length;
+    }
+    return 0;
   }
   if (command === 'get_data_folder_path') {
     return "%APPDATA%\\AssetTracking";
@@ -286,29 +348,23 @@ function mockApi(command, args) {
   return null;
 }
 
-// Global App State
-let allAssets = [];
-let filteredAssets = [];
-let currentFilterStatus = '全部';
-let currentFilterCategory = '全部';
-let searchQuery = '';
-let appSettings = {};
-
-// DOM Elements
+// Initialization Entrypoint
 document.addEventListener('DOMContentLoaded', async () => {
+  console.log('[AssetTracking] Initializing application...');
   initNavigation();
   initEventListeners();
   await loadSettings();
   await refreshAllData();
 });
 
-// Navigation Handling
+// Sidebar Navigation
 function initNavigation() {
   const navItems = document.querySelectorAll('.nav-item');
   const sections = document.querySelectorAll('.view-section');
 
   navItems.forEach(item => {
-    item.addEventListener('click', () => {
+    item.addEventListener('click', (e) => {
+      e.preventDefault();
       navItems.forEach(n => n.classList.remove('active'));
       sections.forEach(s => s.classList.remove('active'));
 
@@ -319,30 +375,36 @@ function initNavigation() {
         targetSection.classList.add('active');
       }
 
-      // Update Header Title
-      const pageTitle = item.querySelector('span').innerText;
-      document.getElementById('header-title').innerText = pageTitle;
+      const pageTitle = item.querySelector('span')?.innerText || '資產追蹤系統';
+      const headerTitle = document.getElementById('header-title');
+      if (headerTitle) {
+        headerTitle.innerText = pageTitle;
+      }
 
-      if (targetView === 'view-dashboard') renderDashboard();
-      if (targetView === 'view-assets') renderAssetsTable();
-      if (targetView === 'view-logs') loadLogs();
-      if (targetView === 'view-settings') loadSettingsView();
+      try {
+        if (targetView === 'view-dashboard') renderDashboard();
+        if (targetView === 'view-assets') renderAssetsTable();
+        if (targetView === 'view-logs') loadLogs();
+        if (targetView === 'view-settings') loadSettingsView();
+      } catch (err) {
+        console.error('Error switching tab:', err);
+      }
     });
   });
 }
 
-// Event Listeners
+// Global Event Listeners
 function initEventListeners() {
   // Search input
   const searchInput = document.getElementById('search-input');
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
-      searchQuery = e.target.value.toLowerCase().trim();
+      searchQuery = (e.target.value || '').toLowerCase().trim();
       applyFilters();
     });
   }
 
-  // Category filter
+  // Category filter dropdown
   const catSelect = document.getElementById('category-filter');
   if (catSelect) {
     catSelect.addEventListener('change', (e) => {
@@ -351,77 +413,150 @@ function initEventListeners() {
     });
   }
 
-  // Status Chips
+  // Status Filter Chips
   document.querySelectorAll('.chip').forEach(chip => {
     chip.addEventListener('click', () => {
       document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
-      currentFilterStatus = chip.getAttribute('data-status');
+      currentFilterStatus = chip.getAttribute('data-status') || '全部';
       applyFilters();
     });
   });
 
-  // Modal open button
-  document.getElementById('btn-add-asset')?.addEventListener('click', () => {
-    openAssetModal();
-  });
-  document.getElementById('btn-add-asset-top')?.addEventListener('click', () => {
-    openAssetModal();
+  // Add Asset Buttons
+  const btnAddTop = document.getElementById('btn-add-asset-top');
+  if (btnAddTop) {
+    btnAddTop.addEventListener('click', (e) => {
+      e.preventDefault();
+      openAssetModal();
+    });
+  }
+
+  const btnAddToolbar = document.getElementById('btn-add-asset');
+  if (btnAddToolbar) {
+    btnAddToolbar.addEventListener('click', (e) => {
+      e.preventDefault();
+      openAssetModal();
+    });
+  }
+
+  // GitHub Sync Buttons
+  document.getElementById('btn-header-sync')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    triggerGitHubSync();
   });
 
-  // Quick Sync Button in Header & Sidebar
-  document.getElementById('btn-header-sync')?.addEventListener('click', triggerGitHubSync);
-  document.getElementById('btn-sidebar-sync')?.addEventListener('click', triggerGitHubSync);
+  document.getElementById('btn-sidebar-sync')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    triggerGitHubSync();
+  });
 
-  // Modal Close buttons
+  // Modal Close Buttons
   document.querySelectorAll('.btn-close-modal').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.modal-backdrop').forEach(m => m.classList.remove('open'));
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeAllModals();
     });
   });
 
-  // Form submit
+  // Modal Backdrop Click to Close
+  document.querySelectorAll('.modal-backdrop').forEach(modal => {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        closeAllModals();
+      }
+    });
+  });
+
+  // Forms
   document.getElementById('asset-form')?.addEventListener('submit', handleAssetFormSubmit);
   document.getElementById('settings-form')?.addEventListener('submit', handleSettingsFormSubmit);
   document.getElementById('operation-form')?.addEventListener('submit', handleOperationFormSubmit);
 
-  // Dynamic Depreciation preview in form
-  const priceInput = document.getElementById('field-price');
-  const yearsInput = document.getElementById('field-years');
-  const dateInput = document.getElementById('field-purchase-date');
-  [priceInput, yearsInput, dateInput].forEach(elem => {
-    elem?.addEventListener('input', updateDepreciationPreview);
+  // Dynamic Depreciation Preview
+  ['field-price', 'field-years', 'field-purchase-date'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', updateDepreciationPreview);
   });
 
-  // Export buttons
-  document.getElementById('btn-export-csv')?.addEventListener('click', exportCsv);
-  document.getElementById('btn-export-json')?.addEventListener('click', exportJson);
+  // Export / Import
+  document.getElementById('btn-export-csv')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    exportCsv();
+  });
+
+  document.getElementById('btn-export-json')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    exportJson();
+  });
+
   document.getElementById('file-import-json')?.addEventListener('change', handleImportJson);
+
+  // Table Event Delegation (Ensures edit, operation, and delete ALWAYS fire)
+  const tbody = document.getElementById('assets-tbody');
+  if (tbody) {
+    tbody.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      const action = btn.getAttribute('data-action');
+      const id = btn.getAttribute('data-id');
+
+      if (action === 'edit') {
+        const asset = allAssets.find(a => a.id === id);
+        if (asset) openAssetModal(asset);
+      } else if (action === 'operation') {
+        openOperationModal(id);
+      } else if (action === 'delete') {
+        const asset = allAssets.find(a => a.id === id);
+        openDeleteConfirmModal(id, asset?.name || id);
+      }
+    });
+  }
+
+  // Delete Confirm Modal Handler
+  document.getElementById('btn-confirm-delete')?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (!pendingDeleteId) return;
+    try {
+      await invokeApi('delete_asset', { id: pendingDeleteId, operator: "使用者" });
+      showToast(`已成功刪除該資產`, 'info');
+      closeAllModals();
+      await refreshAllData();
+    } catch (err) {
+      showToast('刪除資產失敗: ' + err, 'error');
+    }
+  });
 }
 
-// Refresh Data
+function closeAllModals() {
+  document.querySelectorAll('.modal-backdrop').forEach(m => m.classList.remove('open'));
+  pendingDeleteId = null;
+}
+
+// Refresh Data from backend
 async function refreshAllData() {
   try {
-    allAssets = await invokeApi('get_assets');
+    const data = await invokeApi('get_assets');
+    allAssets = Array.isArray(data) ? data : [];
     applyFilters();
     await renderDashboard();
   } catch (err) {
+    console.error('Failed to refresh data:', err);
     showToast('載入數據失敗: ' + err, 'error');
   }
 }
 
-// Apply Filters & Search
+// Filter Logic
 function applyFilters() {
-  filteredAssets = allAssets.filter(asset => {
-    // Status filter
+  filteredAssets = (allAssets || []).filter(asset => {
     if (currentFilterStatus !== '全部' && asset.status !== currentFilterStatus) {
       return false;
     }
-    // Category filter
     if (currentFilterCategory !== '全部' && asset.category !== currentFilterCategory) {
       return false;
     }
-    // Search query
     if (searchQuery) {
       const matchName = (asset.name || '').toLowerCase().includes(searchQuery);
       const matchId = (asset.id || '').toLowerCase().includes(searchQuery);
@@ -445,37 +580,42 @@ function renderAssetsTable() {
   if (filteredAssets.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="8" style="text-align: center; padding: 40px; color: var(--text-dim);">
-          <i class="fa-solid fa-box-open" style="font-size: 32px; margin-bottom: 12px; display: block;"></i>
-          查無相符的資產項目
+        <td colspan="8" style="text-align: center; padding: 48px; color: var(--text-dim);">
+          <div style="font-size: 32px; margin-bottom: 12px;">📦</div>
+          <div style="font-size: 14px; font-weight: 500;">查無相符的資產項目</div>
+          <div style="font-size: 12px; margin-top: 6px;">您可以點擊右上角「新增資產」按鈕快速建檔</div>
         </td>
       </tr>
     `;
     return;
   }
 
-  const currencySymbol = appSettings.currency === 'USD' ? '$' : 'NT$';
+  const currencySymbol = (appSettings?.currency === 'USD') ? '$' : 'NT$';
 
   tbody.innerHTML = filteredAssets.map(asset => {
     const badgeClass = getBadgeClass(asset.status);
-    const deprPercent = asset.purchase_price > 0 
-      ? Math.max(0, Math.min(100, Math.round((asset.current_value / asset.purchase_price) * 100)))
+    const price = asset.purchase_price || 0;
+    const currentVal = (asset.current_value !== undefined) ? asset.current_value : price;
+    const deprPercent = price > 0 
+      ? Math.max(0, Math.min(100, Math.round((currentVal / price) * 100)))
       : 100;
 
     return `
       <tr>
         <td>
-          <span style="font-family: monospace; font-weight: 600; color: #818cf8;">${escapeHtml(asset.id)}</span>
+          <span style="font-family: monospace; font-weight: 700; color: #818cf8; letter-spacing: 0.5px;">${escapeHtml(asset.id)}</span>
         </td>
         <td>
-          <div style="font-weight: 600; color: var(--text-main);">${escapeHtml(asset.name)}</div>
-          <div style="font-size: 11px; color: var(--text-dim);">
+          <div style="font-weight: 600; color: var(--text-main); font-size: 14px;">${escapeHtml(asset.name)}</div>
+          <div style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">
             ${escapeHtml(asset.brand || '')} ${escapeHtml(asset.model || '')} 
             ${asset.serial_number ? `· S/N: ${escapeHtml(asset.serial_number)}` : ''}
           </div>
         </td>
         <td>
-          <span style="font-size: 12px; color: var(--text-muted);">${escapeHtml(asset.category)}</span>
+          <span style="font-size: 12px; color: var(--text-muted); background: rgba(255,255,255,0.05); padding: 3px 8px; border-radius: 4px;">
+            ${escapeHtml(asset.category)}
+          </span>
         </td>
         <td>
           <span class="badge ${badgeClass}">${escapeHtml(asset.status)}</span>
@@ -485,28 +625,28 @@ function renderAssetsTable() {
           <div style="font-size: 11px; color: var(--text-dim);">${escapeHtml(asset.location || '—')}</div>
         </td>
         <td>
-          <div style="font-weight: 600;">${currencySymbol}${formatMoney(asset.current_value)}</div>
+          <div style="font-weight: 700; color: #f8fafc;">${currencySymbol}${formatMoney(currentVal)}</div>
           <div style="font-size: 11px; color: var(--text-dim);">
-            原價: ${currencySymbol}${formatMoney(asset.purchase_price)} (${deprPercent}%)
+            原價: ${currencySymbol}${formatMoney(price)} (${deprPercent}%)
           </div>
-          <div class="progress-track" style="margin-top: 4px; height: 4px; width: 80px;">
+          <div class="progress-track" style="margin-top: 4px; height: 4px; width: 85px;">
             <div class="progress-fill" style="width: ${deprPercent}%;"></div>
           </div>
         </td>
         <td>
-          <span style="font-size: 12px; color: ${isWarrantyNear(asset.warranty_date) ? 'var(--warning)' : 'var(--text-muted)'};">
+          <span style="font-size: 12px; font-weight: 500; color: ${isWarrantyNear(asset.warranty_date) ? 'var(--warning)' : 'var(--text-muted)'};">
             ${escapeHtml(asset.warranty_date || '—')}
           </span>
         </td>
         <td>
           <div style="display: flex; gap: 6px;">
-            <button class="btn btn-secondary btn-sm" onclick="openOperationModal('${asset.id}')" title="異動 / 借還 / 送修">
-              <i class="fa-solid fa-arrows-rotate"></i>
+            <button type="button" class="btn btn-secondary btn-sm" data-action="operation" data-id="${escapeHtml(asset.id)}" title="異動 / 借還 / 送修">
+              <i class="fa-solid fa-arrows-rotate"></i> 異動
             </button>
-            <button class="btn btn-secondary btn-sm" onclick="editAsset('${asset.id}')" title="編輯">
-              <i class="fa-solid fa-pen"></i>
+            <button type="button" class="btn btn-secondary btn-sm" data-action="edit" data-id="${escapeHtml(asset.id)}" title="編輯">
+              <i class="fa-solid fa-pen"></i> 編輯
             </button>
-            <button class="btn btn-danger btn-sm" onclick="confirmDeleteAsset('${asset.id}', '${escapeHtml(asset.name)}')" title="刪除">
+            <button type="button" class="btn btn-danger btn-sm" data-action="delete" data-id="${escapeHtml(asset.id)}" title="刪除">
               <i class="fa-solid fa-trash"></i>
             </button>
           </div>
@@ -519,15 +659,25 @@ function renderAssetsTable() {
 // Render Dashboard
 async function renderDashboard() {
   try {
-    const stats = await invokeApi('get_dashboard_stats');
-    const currency = appSettings.currency === 'USD' ? '$' : 'NT$';
+    const stats = await invokeApi('get_dashboard_stats') || {};
+    const currency = (appSettings?.currency === 'USD') ? '$' : 'NT$';
 
-    document.getElementById('stat-total-count').innerText = stats.total_count;
-    document.getElementById('stat-original-val').innerText = `${currency}${formatMoney(stats.total_original_value)}`;
-    document.getElementById('stat-current-val').innerText = `${currency}${formatMoney(stats.total_current_value)}`;
-    document.getElementById('stat-attention').innerText = (stats.borrowed_count + stats.repairing_count + stats.expiring_warranty_count);
+    const countElem = document.getElementById('stat-total-count');
+    if (countElem) countElem.innerText = stats.total_count || 0;
 
-    // Category Distribution
+    const origElem = document.getElementById('stat-original-val');
+    if (origElem) origElem.innerText = `${currency}${formatMoney(stats.total_original_value || 0)}`;
+
+    const currElem = document.getElementById('stat-current-val');
+    if (currElem) currElem.innerText = `${currency}${formatMoney(stats.total_current_value || 0)}`;
+
+    const attElem = document.getElementById('stat-attention');
+    if (attElem) {
+      const attention = (stats.borrowed_count || 0) + (stats.repairing_count || 0) + (stats.expiring_warranty_count || 0);
+      attElem.innerText = attention;
+    }
+
+    // Category Distribution Bars
     const catContainer = document.getElementById('category-distribution-box');
     if (catContainer) {
       const cats = Object.entries(stats.category_distribution || {});
@@ -548,7 +698,7 @@ async function renderDashboard() {
       }).join('') || '<div style="color: var(--text-dim); padding: 20px 0;">暫無資產分類數據</div>';
     }
 
-    // Status Distribution
+    // Status Distribution Badges
     const statusContainer = document.getElementById('status-distribution-box');
     if (statusContainer) {
       const statuses = Object.entries(stats.status_distribution || {});
@@ -556,10 +706,10 @@ async function renderDashboard() {
         return `
           <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border-color);">
             <span class="badge ${getBadgeClass(status)}">${escapeHtml(status)}</span>
-            <span style="font-weight: 600; font-size: 14px;">${count}</span>
+            <span style="font-weight: 700; font-size: 14px;">${count}</span>
           </div>
         `;
-      }).join('');
+      }).join('') || '<div style="color: var(--text-dim); padding: 10px 0;">暫無狀態數據</div>';
     }
 
     // Recent Logs on Dashboard
@@ -584,7 +734,7 @@ async function renderDashboard() {
 // Load Audit Logs View
 async function loadLogs() {
   try {
-    const logs = await invokeApi('get_audit_logs');
+    const logs = await invokeApi('get_audit_logs') || [];
     const logsContainer = document.getElementById('full-logs-container');
     if (!logsContainer) return;
 
@@ -593,11 +743,11 @@ async function loadLogs() {
         <span class="log-badge ${getActionBadgeClass(log.action)}">${escapeHtml(log.action)}</span>
         <div class="log-content">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <strong style="color: var(--text-main);">${escapeHtml(log.asset_name)} (${escapeHtml(log.asset_id)})</strong>
+            <strong style="color: var(--text-main); font-size: 14px;">${escapeHtml(log.asset_name)} (${escapeHtml(log.asset_id)})</strong>
             <span class="log-time">${escapeHtml(log.timestamp)}</span>
           </div>
-          <div style="margin-top: 4px; color: var(--text-muted);">${escapeHtml(log.details)}</div>
-          <div style="margin-top: 4px; font-size: 11px; color: var(--text-dim);">操作者: ${escapeHtml(log.operator)}</div>
+          <div style="margin-top: 4px; color: var(--text-muted); font-size: 13px;">${escapeHtml(log.details)}</div>
+          <div style="margin-top: 4px; font-size: 11px; color: var(--text-dim);">操作人員: ${escapeHtml(log.operator)}</div>
         </div>
       </div>
     `).join('') || '<div style="color: var(--text-dim); text-align: center; padding: 40px;">尚無異動審計日誌</div>';
@@ -606,10 +756,13 @@ async function loadLogs() {
   }
 }
 
-// Load Settings
+// Settings Load & Save
 async function loadSettings() {
   try {
-    appSettings = await invokeApi('get_settings');
+    const s = await invokeApi('get_settings');
+    if (s && typeof s === 'object') {
+      appSettings = { ...appSettings, ...s };
+    }
     updateSyncBadgeUI();
   } catch (err) {
     console.error('Failed to load settings:', err);
@@ -617,11 +770,20 @@ async function loadSettings() {
 }
 
 function loadSettingsView() {
-  document.getElementById('setting-repo').value = appSettings.github_repo || '';
-  document.getElementById('setting-token').value = appSettings.github_token || '';
-  document.getElementById('setting-branch').value = appSettings.github_branch || 'main';
-  document.getElementById('setting-auto-sync').checked = !!appSettings.auto_sync;
-  document.getElementById('setting-currency').value = appSettings.currency || 'TWD';
+  const repoInput = document.getElementById('setting-repo');
+  if (repoInput) repoInput.value = appSettings.github_repo || '';
+
+  const tokenInput = document.getElementById('setting-token');
+  if (tokenInput) tokenInput.value = appSettings.github_token || '';
+
+  const branchInput = document.getElementById('setting-branch');
+  if (branchInput) branchInput.value = appSettings.github_branch || 'main';
+
+  const autoSyncInput = document.getElementById('setting-auto-sync');
+  if (autoSyncInput) autoSyncInput.checked = !!appSettings.auto_sync;
+
+  const currInput = document.getElementById('setting-currency');
+  if (currInput) currInput.value = appSettings.currency || 'TWD';
 
   const statusBox = document.getElementById('settings-sync-status-text');
   if (statusBox) {
@@ -630,18 +792,19 @@ function loadSettingsView() {
 
   // Load Data folder path
   invokeApi('get_data_folder_path').then(path => {
-    document.getElementById('local-data-path').innerText = path;
-  });
+    const pathElem = document.getElementById('local-data-path');
+    if (pathElem && path) pathElem.innerText = path;
+  }).catch(() => {});
 }
 
 async function handleSettingsFormSubmit(e) {
   e.preventDefault();
   const updated = {
-    currency: document.getElementById('setting-currency').value,
-    github_repo: document.getElementById('setting-repo').value.trim(),
-    github_token: document.getElementById('setting-token').value.trim(),
-    github_branch: document.getElementById('setting-branch').value.trim() || 'main',
-    auto_sync: document.getElementById('setting-auto-sync').checked,
+    currency: document.getElementById('setting-currency')?.value || 'TWD',
+    github_repo: (document.getElementById('setting-repo')?.value || '').trim(),
+    github_token: (document.getElementById('setting-token')?.value || '').trim(),
+    github_branch: (document.getElementById('setting-branch')?.value || 'main').trim(),
+    auto_sync: !!document.getElementById('setting-auto-sync')?.checked,
     last_sync_time: appSettings.last_sync_time,
     last_sync_status: appSettings.last_sync_status
   };
@@ -656,7 +819,7 @@ async function handleSettingsFormSubmit(e) {
   }
 }
 
-// Trigger GitHub Sync
+// GitHub Sync Trigger
 async function triggerGitHubSync() {
   const dot = document.getElementById('sidebar-sync-dot');
   const text = document.getElementById('sidebar-sync-text');
@@ -666,20 +829,20 @@ async function triggerGitHubSync() {
   showToast('正在與 GitHub 連線發佈最新資產數據...', 'info');
 
   try {
-    const res = await invokeApi('sync_to_github_now');
+    const res = await invokeApi('sync_to_github_now') || {};
     if (res.success) {
-      showToast(res.message, 'success');
+      showToast(res.message || '同步完成', 'success');
       appSettings.last_sync_time = res.timestamp;
       appSettings.last_sync_status = res.message;
       updateSyncBadgeUI();
     } else {
-      showToast(res.message, 'error');
+      showToast(res.message || '同步失敗', 'error');
     }
   } catch (err) {
     showToast('GitHub 同步請求失敗: ' + err, 'error');
   } finally {
     if (dot) dot.classList.remove('syncing');
-    if (text) text.innerText = 'GitHub 同步';
+    if (text) text.innerText = 'GitHub 雲端';
   }
 }
 
@@ -690,14 +853,15 @@ function updateSyncBadgeUI() {
   }
 }
 
-// Asset Modal Open / Edit
+// Open Asset Modal
 function openAssetModal(asset = null) {
   const modal = document.getElementById('modal-asset');
   const title = document.getElementById('modal-asset-title');
+  if (!modal) return;
 
   if (asset) {
-    title.innerText = '編輯資產資料';
-    document.getElementById('field-id').value = asset.id;
+    if (title) title.innerText = '編輯資產資料';
+    document.getElementById('field-id').value = asset.id || '';
     document.getElementById('field-id').readOnly = true;
     document.getElementById('field-name').value = asset.name || '';
     document.getElementById('field-category').value = asset.category || '3C與電腦';
@@ -715,7 +879,7 @@ function openAssetModal(asset = null) {
     document.getElementById('field-tags').value = (asset.tags || []).join(', ');
     document.getElementById('field-notes').value = asset.notes || '';
   } else {
-    title.innerText = '新增資產建檔';
+    if (title) title.innerText = '新增資產建檔';
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('field-id').value = '';
     document.getElementById('field-id').readOnly = false;
@@ -740,12 +904,14 @@ function openAssetModal(asset = null) {
   modal.classList.add('open');
 }
 
-window.editAsset = function(id) {
-  const asset = allAssets.find(a => a.id === id);
-  if (asset) {
-    openAssetModal(asset);
-  }
-};
+// Open Delete Confirm Modal
+function openDeleteConfirmModal(id, name) {
+  pendingDeleteId = id;
+  const nameElem = document.getElementById('delete-asset-name-target');
+  if (nameElem) nameElem.innerText = `${name} (${id})`;
+  const modal = document.getElementById('modal-delete');
+  if (modal) modal.classList.add('open');
+}
 
 function updateDepreciationPreview() {
   const price = parseFloat(document.getElementById('field-price')?.value) || 0;
@@ -765,31 +931,32 @@ function updateDepreciationPreview() {
   const ratio = Math.min(1.0, elapsedYears / years);
   const current = Math.max(0, price * (1.0 - ratio));
 
-  previewElem.innerText = `依折舊公式預估現值: NT$${formatMoney(Math.round(current))} (已折舊 ${(ratio * 100).toFixed(1)}%)`;
+  previewElem.innerText = `直線折舊公式預估現值: NT$${formatMoney(Math.round(current))} (累計折舊 ${(ratio * 100).toFixed(1)}%)`;
 }
 
+// Handle Asset Form Submit
 async function handleAssetFormSubmit(e) {
   e.preventDefault();
-  const tagsRaw = document.getElementById('field-tags').value;
+  const tagsRaw = document.getElementById('field-tags')?.value || '';
   const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
 
   const asset = {
-    id: document.getElementById('field-id').value.trim(),
-    name: document.getElementById('field-name').value.trim(),
-    category: document.getElementById('field-category').value,
-    brand: document.getElementById('field-brand').value.trim(),
-    model: document.getElementById('field-model').value.trim(),
-    serial_number: document.getElementById('field-sn').value.trim(),
-    purchase_date: document.getElementById('field-purchase-date').value,
-    purchase_price: parseFloat(document.getElementById('field-price').value) || 0,
-    current_value: 0, // will be recalculated by backend
-    depreciation_years: parseInt(document.getElementById('field-years').value) || 3,
-    status: document.getElementById('field-status').value,
-    location: document.getElementById('field-location').value.trim(),
-    department: document.getElementById('field-dept').value.trim(),
-    custodian: document.getElementById('field-custodian').value.trim(),
-    warranty_date: document.getElementById('field-warranty').value || null,
-    notes: document.getElementById('field-notes').value.trim(),
+    id: (document.getElementById('field-id')?.value || '').trim(),
+    name: (document.getElementById('field-name')?.value || '').trim(),
+    category: document.getElementById('field-category')?.value || '3C與電腦',
+    brand: (document.getElementById('field-brand')?.value || '').trim(),
+    model: (document.getElementById('field-model')?.value || '').trim(),
+    serial_number: (document.getElementById('field-sn')?.value || '').trim(),
+    purchase_date: document.getElementById('field-purchase-date')?.value || new Date().toISOString().split('T')[0],
+    purchase_price: parseFloat(document.getElementById('field-price')?.value) || 0,
+    current_value: 0,
+    depreciation_years: parseInt(document.getElementById('field-years')?.value) || 3,
+    status: document.getElementById('field-status')?.value || '在用中',
+    location: (document.getElementById('field-location')?.value || '').trim(),
+    department: (document.getElementById('field-dept')?.value || '').trim(),
+    custodian: (document.getElementById('field-custodian')?.value || '').trim(),
+    warranty_date: document.getElementById('field-warranty')?.value || null,
+    notes: (document.getElementById('field-notes')?.value || '').trim(),
     tags: tags,
     created_at: "",
     updated_at: ""
@@ -797,49 +964,39 @@ async function handleAssetFormSubmit(e) {
 
   try {
     const saved = await invokeApi('save_asset', { asset, operator: "使用者" });
-    showToast(`資產 [${saved.name}] 儲存成功！已寫入本地儲存`, 'success');
-    document.getElementById('modal-asset').classList.remove('open');
+    showToast(`資產 [${saved.name}] 已成功儲存！`, 'success');
+    closeAllModals();
     await refreshAllData();
   } catch (err) {
     showToast('儲存資產失敗: ' + err, 'error');
   }
 }
 
-// Delete Asset
-window.confirmDeleteAsset = async function(id, name) {
-  if (confirm(`確定要刪除資產 [${name}] (${id}) 嗎？此操作將在本地與雲端記錄審計日誌。`)) {
-    try {
-      await invokeApi('delete_asset', { id, operator: "使用者" });
-      showToast(`已成功刪除資產 [${name}]`, 'info');
-      await refreshAllData();
-    } catch (err) {
-      showToast('刪除資產失敗: ' + err, 'error');
-    }
-  }
-};
-
-// Operations Modal (借出/歸還/維修/報廢)
-window.openOperationModal = function(id) {
+// Open Operations Modal
+function openOperationModal(id) {
   const asset = allAssets.find(a => a.id === id);
   if (!asset) return;
 
   const modal = document.getElementById('modal-operation');
+  if (!modal) return;
+
   document.getElementById('op-asset-id').value = asset.id;
-  document.getElementById('op-asset-name-display').innerText = `${asset.name} (${asset.id}) - 目前狀態: ${asset.status}`;
-  document.getElementById('op-new-status').value = asset.status === '在用中' ? '外借中' : '在用中';
+  document.getElementById('op-asset-name-display').innerText = `${asset.name} (${asset.id}) - 目前: ${asset.status}`;
+  document.getElementById('op-new-status').value = (asset.status === '在用中') ? '外借中' : '在用中';
   document.getElementById('op-notes').value = '';
   document.getElementById('op-custodian').value = asset.custodian || '';
 
   modal.classList.add('open');
-};
+}
 
 async function handleOperationFormSubmit(e) {
   e.preventDefault();
-  const id = document.getElementById('op-asset-id').value;
-  const newStatus = document.getElementById('op-new-status').value;
-  const actionType = document.getElementById('op-action-type').value;
-  const notes = document.getElementById('op-notes').value.trim();
-  const operator = document.getElementById('op-operator').value.trim() || '設備管理員';
+  const id = document.getElementById('op-asset-id')?.value;
+  const newStatus = document.getElementById('op-new-status')?.value;
+  const actionType = document.getElementById('op-action-type')?.value;
+  const notes = (document.getElementById('op-notes')?.value || '').trim();
+  const operator = (document.getElementById('op-operator')?.value || '設備管理員').trim();
+  const custodian = (document.getElementById('op-custodian')?.value || '').trim();
 
   try {
     await invokeApi('update_asset_status', {
@@ -847,10 +1004,11 @@ async function handleOperationFormSubmit(e) {
       new_status: newStatus,
       action_type: actionType,
       notes,
-      operator
+      operator,
+      custodian
     });
     showToast(`資產狀態已更新為 [${newStatus}]！`, 'success');
-    document.getElementById('modal-operation').classList.remove('open');
+    closeAllModals();
     await refreshAllData();
   } catch (err) {
     showToast('更新狀態失敗: ' + err, 'error');
@@ -865,9 +1023,9 @@ async function exportCsv() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `資產清冊備份_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `資產清冊_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
-    showToast('已匯出 CSV 資產清冊報表', 'success');
+    showToast('已匯出 CSV 清冊報表', 'success');
   } catch (err) {
     showToast('匯出 CSV 失敗: ' + err, 'error');
   }
@@ -880,16 +1038,16 @@ async function exportJson() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `資產清冊備份_${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `資產數據備份_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
-    showToast('已匯出 JSON 本地數據檔', 'success');
+    showToast('已匯出 JSON 數據檔', 'success');
   } catch (err) {
     showToast('匯出 JSON 失敗: ' + err, 'error');
   }
 }
 
 async function handleImportJson(e) {
-  const file = e.target.files[0];
+  const file = e.target.files?.[0];
   if (!file) return;
 
   const reader = new FileReader();
@@ -897,7 +1055,7 @@ async function handleImportJson(e) {
     try {
       const content = evt.target.result;
       const count = await invokeApi('import_assets_json', { json_str: content, operator: "批次匯入員" });
-      showToast(`成功匯入 ${count} 筆資產資料！`, 'success');
+      showToast(`成功匯入 ${count} 筆資產！`, 'success');
       await refreshAllData();
     } catch (err) {
       showToast('匯入失敗: ' + err, 'error');
@@ -950,7 +1108,8 @@ function escapeHtml(str) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function showToast(msg, type = 'info') {

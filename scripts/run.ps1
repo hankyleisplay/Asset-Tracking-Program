@@ -10,5 +10,6 @@ if (-not (Test-Path "node_modules")) {
     npm install
 }
 
+$env:CARGO_INCREMENTAL = "0"
 Write-Host "啟動 Tauri 開發模式..." -ForegroundColor Green
 npx tauri dev
