@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>資產追蹤系統 (Asset Tracking Program)</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">
+          <i class="fa-solid fa-boxes-stacked"></i>
+        </div>
+        <div>
+          <div class="brand-title">資產追蹤系統</div>
+          <div class="brand-subtitle">Asset Tracking</div>
+        </div>
+      </div>
+
+      <ul class="nav-links">
+        <li class="nav-item active" data-view="view-dashboard">
+          <i class="fa-solid fa-chart-pie"></i>
+          <span>總覽儀表板</span>
+        </li>
+        <li class="nav-item" data-view="view-assets">
+          <i class="fa-solid fa-boxes-packing"></i>
+          <span>資產清冊目錄</span>
+        </li>
+        <li class="nav-item" data-view="view-logs">
+          <i class="fa-solid fa-clipboard-list"></i>
+          <span>異動審計日誌</span>
+        </li>
+        <li class="nav-item" data-view="view-settings">
+          <i class="fa-solid fa-cloud-arrow-up"></i>
+          <span>GitHub 同步與設定</span>
+        </li>
+      </ul>
+
+      <div class="sidebar-footer">
+        <div class="sync-status-badge" id="btn-sidebar-sync" style="cursor: pointer;" title="點擊立即同步至 GitHub">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="sync-dot" id="sidebar-sync-dot"></div>
+            <span id="sidebar-sync-text">GitHub 雲端</span>
+          </div>
+          <span style="font-size: 11px; color: var(--text-dim);" id="sidebar-sync-time">未同步</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Workspace -->
+    <main class="main-content">
+      <!-- Top Header -->
+      <header class="top-header">
+        <div class="page-title-box">
+          <h1 id="header-title">總覽儀表板</h1>
+          <p>本地高效資料庫 · 即時折舊試算 · GitHub 自動同步</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn btn-secondary btn-sm" id="btn-header-sync">
+            <i class="fa-brands fa-github"></i>
+            <span>同步至 GitHub</span>
+          </button>
+          <button class="btn btn-primary btn-sm" id="btn-add-asset-top">
+            <i class="fa-solid fa-plus"></i>
+            <span>新增資產</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Content Body -->
+      <div class="content-body">
+        
+        <!-- View 1: Dashboard -->
+        <section id="view-dashboard" class="view-section active">
+          <!-- Stat Cards -->
+          <div class="stats-grid">
+            <div class="stat-card stat-primary">
+              <div class="stat-info">
+                <p>列管資產總數</p>
+                <div class="stat-value" id="stat-total-count">0</div>
+                <div class="stat-desc">台本機持久化儲存</div>
+              </div>
+              <div class="stat-icon-wrapper">
+                <i class="fa-solid fa-cubes"></i>
+              </div>
+            </div>
+
+            <div class="stat-card stat-info">
+              <div class="stat-info">
+                <p>購置原始總額</p>
+                <div class="stat-value" id="stat-original-val">NT$0</div>
+                <div class="stat-desc">歷史購買支出總計</div>
+              </div>
+              <div class="stat-icon-wrapper">
+                <i class="fa-solid fa-receipt"></i>
+              </div>
+            </div>
+
+            <div class="stat-card stat-success">
+              <div class="stat-info">
+                <p>當前評估現值</p>
+                <div class="stat-value" id="stat-current-val">NT$0</div>
+                <div class="stat-desc">直線折舊攤銷後餘額</div>
+              </div>
+              <div class="stat-icon-wrapper">
+                <i class="fa-solid fa-chart-line"></i>
+              </div>
+            </div>
+
+            <div class="stat-card stat-warning">
+              <div class="stat-info">
+                <p>需關注事項</p>
+                <div class="stat-value" id="stat-attention">0</div>
+                <div class="stat-desc">外借 / 送修 / 60天內保固到期</div>
+              </div>
+              <div class="stat-icon-wrapper">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+              </div>
+            </div>
+          </div>
+
+          <!-- Charts and Analytics Grid -->
+          <div class="dashboard-grid">
+            <!-- Category Distribution -->
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">
+                  <i class="fa-solid fa-layer-group" style="color: var(--primary);"></i>
+                  <span>資產分類分佈</span>
+                </div>
+              </div>
+              <div id="category-distribution-box">
+                <!-- Injected via JS -->
+              </div>
+            </div>
+
+            <!-- Status Distribution -->
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">
+                  <i class="fa-solid fa-signal" style="color: var(--success);"></i>
+                  <span>運作狀態概況</span>
+                </div>
+              </div>
+              <div id="status-distribution-box">
+                <!-- Injected via JS -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Logs Section -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <i class="fa-solid fa-clock-rotate-left" style="color: #38bdf8;"></i>
+                <span>最近審計異動紀錄</span>
+              </div>
+            </div>
+            <div id="dashboard-recent-logs">
+              <!-- Injected via JS -->
+            </div>
+          </div>
+        </section>
+
+        <!-- View 2: Assets Directory -->
+        <section id="view-assets" class="view-section">
+          <!-- Toolbar -->
+          <div class="toolbar">
+            <div class="search-box">
+              <i class="fa-solid fa-magnifying-glass search-icon"></i>
+              <input type="text" id="search-input" placeholder="搜尋資產名稱、ID、品牌、型號、S/N、保管人...">
+            </div>
+
+            <div class="filter-group">
+              <select class="form-control" id="category-filter">
+                <option value="全部">全部類別</option>
+                <option value="3C與電腦">3C與電腦</option>
+                <option value="辦公家具">辦公家具</option>
+                <option value="伺服器與網路">伺服器與網路</option>
+                <option value="視聽攝影設備">視聽攝影設備</option>
+                <option value="軟體授權">軟體授權</option>
+                <option value="其它">其它</option>
+              </select>
+
+              <button class="btn btn-secondary btn-sm" id="btn-export-csv" title="匯出 CSV">
+                <i class="fa-solid fa-file-csv"></i> 匯出 CSV
+              </button>
+              <button class="btn btn-secondary btn-sm" id="btn-export-json" title="匯出 JSON">
+                <i class="fa-solid fa-download"></i> 匯出 JSON
+              </button>
+              <label class="btn btn-secondary btn-sm" style="margin: 0; cursor: pointer;" title="匯入 JSON">
+                <i class="fa-solid fa-upload"></i> 匯入 JSON
+                <input type="file" id="file-import-json" accept=".json" style="display: none;">
+              </label>
+
+              <button class="btn btn-primary btn-sm" id="btn-add-asset">
+                <i class="fa-solid fa-plus"></i> 新增資產
+              </button>
+            </div>
+          </div>
+
+          <!-- Status Filter Chips -->
+          <div class="status-chips">
+            <div class="chip active" data-status="全部">全部資產</div>
+            <div class="chip" data-status="在用中">在用中</div>
+            <div class="chip" data-status="閒置中">閒置中</div>
+            <div class="chip" data-status="外借中">外借中</div>
+            <div class="chip" data-status="維修中">維修中</div>
+            <div class="chip" data-status="已報廢">已報廢</div>
+          </div>
+
+          <!-- Assets Table -->
+          <div class="table-container">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th style="width: 130px;">資產編號</th>
+                  <th>資產名稱 / 品牌規格</th>
+                  <th style="width: 110px;">分類</th>
+                  <th style="width: 90px;">狀態</th>
+                  <th style="width: 140px;">保管人 / 地點</th>
+                  <th style="width: 160px;">評估現值 / 原價</th>
+                  <th style="width: 110px;">保固截止</th>
+                  <th style="width: 120px;">操作</th>
+                </tr>
+              </thead>
+              <tbody id="assets-tbody">
+                <!-- Rows injected via JS -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- View 3: Logs -->
+        <section id="view-logs" class="view-section">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <i class="fa-solid fa-list-check" style="color: var(--primary);"></i>
+                <span>系統全量審計與操作紀錄</span>
+              </div>
+            </div>
+            <div id="full-logs-container">
+              <!-- Logs injected via JS -->
+            </div>
+          </div>
+        </section>
+
+        <!-- View 4: Settings -->
+        <section id="view-settings" class="view-section">
+          <div class="card" style="max-width: 800px; margin: 0 auto;">
+            <div class="card-header">
+              <div class="card-title">
+                <i class="fa-brands fa-github" style="color: var(--primary);"></i>
+                <span>GitHub 發佈與本地儲存設定</span>
+              </div>
+            </div>
+
+            <form id="settings-form">
+              <div class="form-group" style="margin-bottom: 16px;">
+                <label class="form-label">GitHub 倉庫位址 (Owner/Repo)</label>
+                <input type="text" class="form-control" id="setting-repo" placeholder="hankyleisplay/Asset-Tracking-Program" required>
+                <small style="color: var(--text-dim); margin-top: 4px;">如: hankyleisplay/Asset-Tracking-Program</small>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 16px;">
+                <label class="form-label">GitHub Personal Access Token (GHT)</label>
+                <input type="password" class="form-control" id="setting-token" placeholder="ghp_..." required>
+                <small style="color: var(--text-dim); margin-top: 4px;">具備 `repo` 讀寫權限之 GitHub 個人權杖</small>
+              </div>
+
+              <div class="form-grid" style="margin-bottom: 16px;">
+                <div class="form-group">
+                  <label class="form-label">同步分支 (Target Branch)</label>
+                  <input type="text" class="form-control" id="setting-branch" placeholder="main" value="main">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">幣別符號</label>
+                  <select class="form-control" id="setting-currency">
+                    <option value="TWD">新台幣 (TWD / NT$)</option>
+                    <option value="USD">美元 (USD / $)</option>
+                    <option value="EUR">歐元 (EUR / €)</option>
+                    <option value="JPY">日圓 (JPY / ¥)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style="background: rgba(15, 23, 42, 0.4); padding: 16px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 20px;">
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                  <input type="checkbox" id="setting-auto-sync" checked style="width: 18px; height: 18px; accent-color: var(--primary);">
+                  <div>
+                    <strong style="color: var(--text-main);">每次改動自動發佈到 GitHub (Auto-Sync)</strong>
+                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                      開啟後，當您建立、修改、借還、送修或刪除資產時，系統將自動於背景將清冊提交並推送到 GitHub 倉庫。
+                    </div>
+                  </div>
+                </label>
+              </div>
+
+              <div style="background: rgba(15, 23, 42, 0.4); padding: 16px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 20px;">
+                <div style="font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px;">
+                  <i class="fa-solid fa-hard-drive"></i> 本地資料庫儲存路徑
+                </div>
+                <div style="font-family: monospace; font-size: 12px; color: #a5b4fc; word-break: break-all;" id="local-data-path">
+                  讀取中...
+                </div>
+                <div style="font-size: 11px; color: var(--text-dim); margin-top: 6px;">
+                  數據完整保存在本機硬碟中，具備高容錯與完全隱私控制。
+                </div>
+              </div>
+
+              <div style="background: rgba(15, 23, 42, 0.4); padding: 16px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 20px;">
+                <div style="font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px;">
+                  <i class="fa-solid fa-circle-nodes"></i> 目前同步狀態
+                </div>
+                <pre id="settings-sync-status-text" style="font-family: inherit; font-size: 12px; color: var(--text-muted); white-space: pre-wrap;">尚未進行同步</pre>
+              </div>
+
+              <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button type="submit" class="btn btn-primary">
+                  <i class="fa-solid fa-floppy-disk"></i> 儲存設定
+                </button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal: Add / Edit Asset -->
+  <div class="modal-backdrop" id="modal-asset">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-asset-title">新增資產建檔</h3>
+        <button type="button" class="btn btn-secondary btn-icon btn-close-modal">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <form id="asset-form">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">資產編號 (留空則自動編碼)</label>
+              <input type="text" class="form-control" id="field-id" placeholder="AST-20261013-001">
+            </div>
+            <div class="form-group">
+              <label class="form-label">資產名稱 *</label>
+              <input type="text" class="form-control" id="field-name" placeholder="例如: MacBook Pro 16吋" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">資產分類 *</label>
+              <select class="form-control" id="field-category">
+                <option value="3C與電腦">3C與電腦</option>
+                <option value="辦公家具">辦公家具</option>
+                <option value="伺服器與網路">伺服器與網路</option>
+                <option value="視聽攝影設備">視聽攝影設備</option>
+                <option value="軟體授權">軟體授權</option>
+                <option value="其它">其它</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">狀態 *</label>
+              <select class="form-control" id="field-status">
+                <option value="在用中">在用中</option>
+                <option value="閒置中">閒置中</option>
+                <option value="外借中">外借中</option>
+                <option value="維修中">維修中</option>
+                <option value="已報廢">已報廢</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">品牌 (Brand)</label>
+              <input type="text" class="form-control" id="field-brand" placeholder="例如: Apple / Dell">
+            </div>
+            <div class="form-group">
+              <label class="form-label">型號 (Model)</label>
+              <input type="text" class="form-control" id="field-model" placeholder="例如: M4 Max / U3223QE">
+            </div>
+            <div class="form-full form-group">
+              <label class="form-label">原廠序號 (S/N)</label>
+              <input type="text" class="form-control" id="field-sn" placeholder="輸入產品序號或條碼碼段">
+            </div>
+          </div>
+
+          <div style="border-top: 1px solid var(--border-color); padding-top: 16px;">
+            <div style="font-size: 13px; font-weight: 600; color: #818cf8; margin-bottom: 12px;">
+              <i class="fa-solid fa-calculator"></i> 購置與折舊試算
+            </div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">購買日期 *</label>
+                <input type="date" class="form-control" id="field-purchase-date" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">購買原價 (TWD) *</label>
+                <input type="number" class="form-control" id="field-price" min="0" step="1" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">預估折舊年限 (年)</label>
+                <input type="number" class="form-control" id="field-years" min="1" max="50" value="3" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">保固截止日期</label>
+                <input type="date" class="form-control" id="field-warranty">
+              </div>
+            </div>
+            <div id="depreciation-preview" style="margin-top: 8px; font-size: 12px; color: var(--success); font-weight: 500;">
+              預估現值試算: NT$0
+            </div>
+          </div>
+
+          <div style="border-top: 1px solid var(--border-color); padding-top: 16px;">
+            <div style="font-size: 13px; font-weight: 600; color: #818cf8; margin-bottom: 12px;">
+              <i class="fa-solid fa-location-dot"></i> 保管與存放指派
+            </div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">保管部門</label>
+                <input type="text" class="form-control" id="field-dept" placeholder="例如: 技術研發部">
+              </div>
+              <div class="form-group">
+                <label class="form-label">指派保管人</label>
+                <input type="text" class="form-control" id="field-custodian" placeholder="例如: hankyle">
+              </div>
+              <div class="form-full form-group">
+                <label class="form-label">存放地點 / 辦公室位置</label>
+                <input type="text" class="form-control" id="field-location" placeholder="例如: 台北辦公室 4F-A區">
+              </div>
+              <div class="form-full form-group">
+                <label class="form-label">標籤 (逗號分隔)</label>
+                <input type="text" class="form-control" id="field-tags" placeholder="例如: 筆電, 高階, 開發用">
+              </div>
+              <div class="form-full form-group">
+                <label class="form-label">備註說明</label>
+                <textarea class="form-control" id="field-notes" rows="2" placeholder="備註規格、配件清單或特殊保固條款..."></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-close-modal">取消</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="fa-solid fa-check"></i> 確認儲存
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Operations (借還 / 送修 / 報廢) -->
+  <div class="modal-backdrop" id="modal-operation">
+    <div class="modal-box" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 class="modal-title">登記資產異動</h3>
+        <button type="button" class="btn btn-secondary btn-icon btn-close-modal">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <form id="operation-form">
+        <input type="hidden" id="op-asset-id">
+        <div class="modal-body">
+          <div style="font-weight: 600; color: #818cf8; margin-bottom: 8px;" id="op-asset-name-display">
+            選擇資產
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">異動類別</label>
+            <select class="form-control" id="op-action-type">
+              <option value="借出">資產借出 (Check-out)</option>
+              <option value="歸還">資產歸還 (Check-in)</option>
+              <option value="送修">送修檢測 (Maintenance)</option>
+              <option value="完修">維修完成 (Repair Completed)</option>
+              <option value="報廢">資產報廢 (Scrap)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">目標新狀態</label>
+            <select class="form-control" id="op-new-status">
+              <option value="在用中">在用中</option>
+              <option value="外借中">外借中</option>
+              <option value="維修中">維修中</option>
+              <option value="閒置中">閒置中</option>
+              <option value="已報廢">已報廢</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">保管人 / 借調人變更</label>
+            <input type="text" class="form-control" id="op-custodian" placeholder="輸入借出對象或新保管人">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">經手操作者</label>
+            <input type="text" class="form-control" id="op-operator" value="設備管理員" placeholder="操作人員名稱">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">異動備註 / 原因說明</label>
+            <textarea class="form-control" id="op-notes" rows="3" placeholder="例如: 借調用於專案展示，預計一週後歸還..."></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-close-modal">取消</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="fa-solid fa-arrow-right-arrow-left"></i> 確認異動
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

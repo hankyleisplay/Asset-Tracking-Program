@@ -1,0 +1,22 @@
+# Rust / Cargo
+src-tauri/target/
+target/
+**/*.rs.bk
+
+# Node
+node_modules/
+dist/
+npm-debug.log*
+
+# Temporary files
+*.tmp
+*.o
+*.a
+*.exe
+!src-tauri/icons/*.ico
+
+# System & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
