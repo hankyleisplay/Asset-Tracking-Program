@@ -1,5 +1,5 @@
 use crate::models::{AppSettings, Asset, AssetLog, DashboardStats};
-use chrono::{Datelike, Local, NaiveDate};
+use chrono::{Local, NaiveDate};
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Write;

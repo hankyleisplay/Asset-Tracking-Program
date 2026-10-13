@@ -25,7 +25,7 @@ pub async fn save_asset(
     operator: String,
 ) -> Result<Asset, String> {
     let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-    let (is_new, old_name, old_status) = {
+    let (is_new, _old_name, old_status) = {
         let storage = state.lock().map_err(|e| e.to_string())?;
         let assets = storage.load_assets();
         let existing = assets.iter().find(|a| a.id == asset.id);
@@ -49,7 +49,7 @@ pub async fn save_asset(
     // Calculate current depreciated value
     StorageManager::calculate_depreciation(&mut asset);
 
-    let (saved_asset, log_action, log_details) = {
+    let (saved_asset, _log_action, _log_details) = {
         let storage = state.lock().map_err(|e| e.to_string())?;
         let mut assets = storage.load_assets();
 
