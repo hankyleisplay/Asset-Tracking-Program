@@ -17,3 +17,9 @@ base64 = "0.22"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+
+[profile.dev]
+incremental = false
+
+[profile.release]
+incremental = false
