@@ -3,21 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>資產追蹤系統 (Asset Tracking Program)</title>
+  <title>資產追蹤與證券投資系統 (Asset & Portfolio Tracking)</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="app-layout">
-    <!-- Sidebar -->
+    <!-- Sidebar / Navigation Drawer -->
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-icon">
-          <i class="fa-solid fa-boxes-stacked"></i>
+          <i class="fa-solid fa-gem"></i>
         </div>
         <div>
-          <div class="brand-title">資產追蹤系統</div>
-          <div class="brand-subtitle">Asset Tracking</div>
+          <div class="brand-title">資產與證券追蹤</div>
+          <div class="brand-subtitle">Asset & Portfolio</div>
         </div>
       </div>
 
@@ -26,27 +26,36 @@
           <i class="fa-solid fa-chart-pie"></i>
           <span>總覽儀表板</span>
         </li>
+        <li class="nav-item" data-view="view-stocks">
+          <i class="fa-solid fa-arrow-trend-up"></i>
+          <span>證券股票投資</span>
+          <span class="nav-badge" id="sidebar-stock-count">0</span>
+        </li>
         <li class="nav-item" data-view="view-assets">
           <i class="fa-solid fa-boxes-packing"></i>
-          <span>資產清冊目錄</span>
+          <span>實體資產清冊</span>
+          <span class="nav-badge" id="sidebar-asset-count">0</span>
         </li>
         <li class="nav-item" data-view="view-logs">
           <i class="fa-solid fa-clipboard-list"></i>
           <span>異動審計日誌</span>
         </li>
         <li class="nav-item" data-view="view-settings">
-          <i class="fa-solid fa-cloud-arrow-up"></i>
-          <span>GitHub 同步與設定</span>
+          <i class="fa-solid fa-gear"></i>
+          <span>系統設定與同步</span>
         </li>
       </ul>
 
       <div class="sidebar-footer">
         <div class="sync-status-badge" id="btn-sidebar-sync" title="點擊立即同步至 GitHub">
-          <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
             <div class="sync-dot" id="sidebar-sync-dot"></div>
-            <span id="sidebar-sync-text">GitHub 雲端</span>
+            <div>
+              <div style="font-weight: 600; font-size: 13px;" id="sidebar-sync-text">GitHub 雲端同步</div>
+              <div style="font-size: 11px; color: var(--text-dim);" id="sidebar-sync-time">未同步</div>
+            </div>
           </div>
-          <span style="font-size: 11px; color: var(--text-dim);" id="sidebar-sync-time">未同步</span>
+          <i class="fa-brands fa-github" style="font-size: 18px; color: var(--text-muted);"></i>
         </div>
       </div>
     </aside>
@@ -57,14 +66,18 @@
       <header class="top-header">
         <div class="page-title-box">
           <h1 id="header-title">總覽儀表板</h1>
-          <p>本地持久儲存 · 直線折舊試算 · GitHub 雲端自動同步</p>
+          <p id="header-subtitle">本地持久儲存 · 實體資產折舊試算 · 證券股票損益追蹤 · GitHub 雲端自動發佈</p>
         </div>
         <div class="header-actions">
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-header-sync">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-header-sync" title="手動同步至 GitHub">
             <i class="fa-brands fa-github"></i>
-            <span>同步至 GitHub</span>
+            <span>發佈至 GitHub</span>
           </button>
-          <button type="button" class="btn btn-primary btn-sm" id="btn-add-asset-top">
+          <button type="button" class="btn btn-success btn-sm" id="btn-top-add-stock" title="新增股票投資持股">
+            <i class="fa-solid fa-arrow-trend-up"></i>
+            <span>新增持股</span>
+          </button>
+          <button type="button" class="btn btn-primary btn-sm" id="btn-add-asset-top" title="新增固定資產建檔">
             <i class="fa-solid fa-plus"></i>
             <span>新增資產</span>
           </button>
@@ -73,47 +86,74 @@
 
       <!-- Content Body -->
       <div class="content-body">
-        
-        <!-- View 1: Dashboard -->
+
+        <!-- ================================================================
+             View 1: Dashboard (總覽儀表板)
+             ================================================================ -->
         <section id="view-dashboard" class="view-section active">
-          <!-- Stat Cards -->
+          <!-- Crown Hero Banner: 總淨資產 (Total Net Worth) -->
+          <div class="net-worth-hero">
+            <div class="hero-main">
+              <div class="hero-label">
+                <i class="fa-solid fa-crown" style="color: #fbbf24;"></i>
+                <span>綜合總淨資產估值 (Total Net Worth)</span>
+              </div>
+              <div class="hero-amount" id="dash-total-net-worth">NT$ 0</div>
+              <div style="font-size: 12px; color: #cbd5e1;">實體固定資產現值 + 證券股票投資總市值</div>
+            </div>
+
+            <div class="net-worth-breakdown">
+              <div class="breakdown-item">
+                <div class="breakdown-label">📈 證券投資總市值</div>
+                <div class="breakdown-val" id="dash-breakdown-stock">NT$ 0</div>
+                <div id="dash-breakdown-stock-pnl" style="font-size: 11px; margin-top: 2px;">未實現: NT$0 (+0.0%)</div>
+              </div>
+              <div class="breakdown-item">
+                <div class="breakdown-label">🏢 實體資產預估現值</div>
+                <div class="breakdown-val" id="dash-breakdown-asset">NT$ 0</div>
+                <div style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">已扣除累計折舊</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- KPI Stat Cards -->
           <div class="stats-grid">
             <div class="stat-card stat-primary">
               <div class="stat-info">
-                <p>列管資產總數</p>
+                <p>列管固定資產</p>
                 <div class="stat-value" id="stat-total-count">0</div>
-                <div class="stat-desc">台本機持久化儲存</div>
+                <div class="stat-desc">台本機硬碟持久化儲存</div>
               </div>
               <div class="stat-icon-wrapper">
-                <i class="fa-solid fa-cubes"></i>
+                <i class="fa-solid fa-boxes-stacked"></i>
               </div>
             </div>
 
-            <div class="stat-card stat-info">
+            <div class="stat-card stat-rose">
               <div class="stat-info">
-                <p>購置原始總額</p>
-                <div class="stat-value" id="stat-original-val">NT$0</div>
-                <div class="stat-desc">歷史購買支出總計</div>
-              </div>
-              <div class="stat-icon-wrapper">
-                <i class="fa-solid fa-receipt"></i>
-              </div>
-            </div>
-
-            <div class="stat-card stat-success">
-              <div class="stat-info">
-                <p>當前評估現值</p>
-                <div class="stat-value" id="stat-current-val">NT$0</div>
-                <div class="stat-desc">直線折舊攤銷後餘額</div>
+                <p>證券持股標的</p>
+                <div class="stat-value" id="stat-stock-count">0</div>
+                <div class="stat-desc" id="stat-stock-pnl-desc">未實現損益: NT$0</div>
               </div>
               <div class="stat-icon-wrapper">
                 <i class="fa-solid fa-chart-line"></i>
               </div>
             </div>
 
+            <div class="stat-card stat-info">
+              <div class="stat-info">
+                <p>資產歷史購置成本</p>
+                <div class="stat-value" id="stat-original-val">NT$ 0</div>
+                <div class="stat-desc">購置設備支出累計</div>
+              </div>
+              <div class="stat-icon-wrapper">
+                <i class="fa-solid fa-receipt"></i>
+              </div>
+            </div>
+
             <div class="stat-card stat-warning">
               <div class="stat-info">
-                <p>需關注事項</p>
+                <p>需關注動態</p>
                 <div class="stat-value" id="stat-attention">0</div>
                 <div class="stat-desc">外借 / 送修 / 60天內過保</div>
               </div>
@@ -123,14 +163,40 @@
             </div>
           </div>
 
-          <!-- Charts and Analytics Grid -->
+          <!-- Analytics & Breakdown Grid -->
           <div class="dashboard-grid">
-            <!-- Category Distribution -->
+            <!-- Asset & Investment Structure -->
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">
+                  <i class="fa-solid fa-scale-balanced" style="color: var(--primary-light);"></i>
+                  <span>資產結構配置分佈</span>
+                </div>
+              </div>
+              <div id="allocation-distribution-box">
+                <!-- Injected via JS -->
+              </div>
+            </div>
+
+            <!-- Stock Market Distribution -->
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">
+                  <i class="fa-solid fa-chart-pie" style="color: #38bdf8;"></i>
+                  <span>證券投資市場配置 (台股 / 美股 / ETF)</span>
+                </div>
+              </div>
+              <div id="stock-distribution-box">
+                <!-- Injected via JS -->
+              </div>
+            </div>
+
+            <!-- Physical Asset Category Breakdown -->
             <div class="card">
               <div class="card-header">
                 <div class="card-title">
                   <i class="fa-solid fa-layer-group" style="color: var(--primary);"></i>
-                  <span>資產分類分佈</span>
+                  <span>實體資產分類分佈</span>
                 </div>
               </div>
               <div id="category-distribution-box">
@@ -138,12 +204,12 @@
               </div>
             </div>
 
-            <!-- Status Distribution -->
+            <!-- Physical Asset Operational Status -->
             <div class="card">
               <div class="card-header">
                 <div class="card-title">
                   <i class="fa-solid fa-signal" style="color: var(--success);"></i>
-                  <span>運作狀態概況</span>
+                  <span>實體設備運作狀態</span>
                 </div>
               </div>
               <div id="status-distribution-box">
@@ -152,12 +218,12 @@
             </div>
           </div>
 
-          <!-- Recent Logs Section -->
+          <!-- Recent Audit Logs -->
           <div class="card">
             <div class="card-header">
               <div class="card-title">
                 <i class="fa-solid fa-clock-rotate-left" style="color: #38bdf8;"></i>
-                <span>最近審計異動紀錄</span>
+                <span>最近審計與異動日誌 (資產借還 / 股票交易)</span>
               </div>
             </div>
             <div id="dashboard-recent-logs">
@@ -166,17 +232,124 @@
           </div>
         </section>
 
-        <!-- View 2: Assets Directory -->
+        <!-- ================================================================
+             View 2: Stock Portfolio (證券股票投資)
+             ================================================================ -->
+        <section id="view-stocks" class="view-section">
+          <!-- Stock Portfolio KPI Row -->
+          <div class="stats-grid">
+            <div class="stat-card stat-rose">
+              <div class="stat-info">
+                <p>證券總市值</p>
+                <div class="stat-value" id="stock-kpi-market-val">NT$ 0</div>
+                <div class="stat-desc">換算新台幣現值</div>
+              </div>
+              <div class="stat-icon-wrapper">
+                <i class="fa-solid fa-wallet"></i>
+              </div>
+            </div>
+
+            <div class="stat-card stat-info">
+              <div class="stat-info">
+                <p>投資總成本</p>
+                <div class="stat-value" id="stock-kpi-cost">NT$ 0</div>
+                <div class="stat-desc">累計買入成本總和</div>
+              </div>
+              <div class="stat-icon-wrapper">
+                <i class="fa-solid fa-sack-dollar"></i>
+              </div>
+            </div>
+
+            <div class="stat-card stat-success">
+              <div class="stat-info">
+                <p>累積未實現損益</p>
+                <div class="stat-value" id="stock-kpi-pnl">NT$ 0</div>
+                <div class="stat-desc" id="stock-kpi-roi">投報率: +0.0%</div>
+              </div>
+              <div class="stat-icon-wrapper">
+                <i class="fa-solid fa-arrow-trend-up"></i>
+              </div>
+            </div>
+
+            <div class="stat-card stat-primary">
+              <div class="stat-info">
+                <p>持股標的檔數</p>
+                <div class="stat-value" id="stock-kpi-holdings-count">0</div>
+                <div class="stat-desc">分散投資配置中</div>
+              </div>
+              <div class="stat-icon-wrapper">
+                <i class="fa-solid fa-cubes"></i>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stock Toolbar -->
+          <div class="toolbar">
+            <div class="search-box">
+              <i class="fa-solid fa-magnifying-glass search-icon"></i>
+              <input type="text" id="stock-search-input" placeholder="搜尋股票代號 (2330, NVDA)、名稱、市場或筆記...">
+            </div>
+
+            <div class="filter-group">
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-export-stocks-csv" title="匯出股票清單 CSV">
+                <i class="fa-solid fa-file-csv"></i> 匯出 CSV
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-batch-update-prices" title="快速更新所有股票市價">
+                <i class="fa-solid fa-arrows-rotate"></i> 批次更新現價
+              </button>
+              <button type="button" class="btn btn-success btn-sm" id="btn-add-stock">
+                <i class="fa-solid fa-plus"></i> 新增股票標的
+              </button>
+            </div>
+          </div>
+
+          <!-- Stock Market Filter Chips -->
+          <div class="status-chips">
+            <div class="chip active stock-filter-chip" data-market="全部">全部標的</div>
+            <div class="chip stock-filter-chip" data-market="台股">台股 (TW)</div>
+            <div class="chip stock-filter-chip" data-market="美股">美股 (US)</div>
+            <div class="chip stock-filter-chip" data-market="ETF">ETF 指數基金</div>
+            <div class="chip stock-filter-chip" data-market="基金">共同基金</div>
+          </div>
+
+          <!-- Stock Table -->
+          <div class="table-container">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th style="width: 110px;">股票代號</th>
+                  <th>標的名稱</th>
+                  <th style="width: 90px;">市場</th>
+                  <th style="width: 100px; text-align: right;">持有股數</th>
+                  <th style="width: 120px; text-align: right;">買入均價</th>
+                  <th style="width: 120px; text-align: right;">目前市價</th>
+                  <th style="width: 140px; text-align: right;">投資總成本 (TWD)</th>
+                  <th style="width: 140px; text-align: right;">當前總市值 (TWD)</th>
+                  <th style="width: 140px; text-align: right;">未實現損益 (TWD)</th>
+                  <th style="width: 100px; text-align: center;">報酬率 %</th>
+                  <th style="width: 170px; text-align: center;">操作管理</th>
+                </tr>
+              </thead>
+              <tbody id="stocks-tbody">
+                <!-- Rows injected via JS -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ================================================================
+             View 3: Physical Assets Directory (實體資產清冊)
+             ================================================================ -->
         <section id="view-assets" class="view-section">
           <!-- Toolbar -->
           <div class="toolbar">
             <div class="search-box">
               <i class="fa-solid fa-magnifying-glass search-icon"></i>
-              <input type="text" id="search-input" placeholder="搜尋資產名稱、ID、品牌、型號、S/N、保管人...">
+              <input type="text" id="search-input" placeholder="搜尋資產名稱、編號、品牌型號、S/N、保管人、地點...">
             </div>
 
             <div class="filter-group">
-              <select class="form-control" id="category-filter">
+              <select class="form-control" id="category-filter" style="width: 150px;">
                 <option value="全部">全部類別</option>
                 <option value="3C與電腦">3C與電腦</option>
                 <option value="辦公家具">辦公家具</option>
@@ -205,12 +378,12 @@
 
           <!-- Status Filter Chips -->
           <div class="status-chips">
-            <div class="chip active" data-status="全部">全部資產</div>
-            <div class="chip" data-status="在用中">在用中</div>
-            <div class="chip" data-status="閒置中">閒置中</div>
-            <div class="chip" data-status="外借中">外借中</div>
-            <div class="chip" data-status="維修中">維修中</div>
-            <div class="chip" data-status="已報廢">已報廢</div>
+            <div class="chip active asset-filter-chip" data-status="全部">全部資產</div>
+            <div class="chip asset-filter-chip" data-status="在用中">在用中</div>
+            <div class="chip asset-filter-chip" data-status="閒置中">閒置中</div>
+            <div class="chip asset-filter-chip" data-status="外借中">外借中</div>
+            <div class="chip asset-filter-chip" data-status="維修中">維修中</div>
+            <div class="chip asset-filter-chip" data-status="已報廢">已報廢</div>
           </div>
 
           <!-- Assets Table -->
@@ -220,12 +393,12 @@
                 <tr>
                   <th style="width: 140px;">資產編號</th>
                   <th>資產名稱 / 品牌型號</th>
-                  <th style="width: 110px;">分類</th>
+                  <th style="width: 120px;">分類</th>
                   <th style="width: 90px;">狀態</th>
-                  <th style="width: 140px;">保管人 / 地點</th>
-                  <th style="width: 170px;">評估現值 / 原價</th>
-                  <th style="width: 110px;">保固截止</th>
-                  <th style="width: 170px;">操作管理</th>
+                  <th style="width: 150px;">保管人 / 存放地點</th>
+                  <th style="width: 180px;">評估現值 / 原價</th>
+                  <th style="width: 120px;">保固截止</th>
+                  <th style="width: 180px; text-align: center;">操作管理</th>
                 </tr>
               </thead>
               <tbody id="assets-tbody">
@@ -235,14 +408,17 @@
           </div>
         </section>
 
-        <!-- View 3: Logs -->
+        <!-- ================================================================
+             View 4: Audit Logs (異動審計日誌)
+             ================================================================ -->
         <section id="view-logs" class="view-section">
           <div class="card">
             <div class="card-header">
               <div class="card-title">
-                <i class="fa-solid fa-list-check" style="color: var(--primary);"></i>
+                <i class="fa-solid fa-list-check" style="color: var(--primary-light);"></i>
                 <span>系統全量審計與操作紀錄</span>
               </div>
+              <div style="font-size: 12px; color: var(--text-dim);">包含股票買入賣出、股價更新、固定資產借還與維修</div>
             </div>
             <div id="full-logs-container">
               <!-- Logs injected via JS -->
@@ -250,36 +426,38 @@
           </div>
         </section>
 
-        <!-- View 4: Settings -->
+        <!-- ================================================================
+             View 5: Settings (系統設定與同步)
+             ================================================================ -->
         <section id="view-settings" class="view-section">
-          <div class="card" style="max-width: 800px; margin: 0 auto;">
+          <div class="card" style="max-width: 820px; margin: 0 auto;">
             <div class="card-header">
               <div class="card-title">
                 <i class="fa-brands fa-github" style="color: var(--primary);"></i>
-                <span>GitHub 發佈與本地儲存設定</span>
+                <span>GitHub 雲端發佈與系統設定</span>
               </div>
             </div>
 
             <form id="settings-form">
-              <div class="form-group" style="margin-bottom: 16px;">
+              <div class="form-group">
                 <label class="form-label">GitHub 倉庫位址 (Owner/Repo)</label>
                 <input type="text" class="form-control" id="setting-repo" placeholder="hankyleisplay/Asset-Tracking-Program" required>
-                <small style="color: var(--text-dim); margin-top: 4px;">如: hankyleisplay/Asset-Tracking-Program</small>
+                <small style="color: var(--text-dim); margin-top: 4px; display: block;">格式: `hankyleisplay/Asset-Tracking-Program`</small>
               </div>
 
-              <div class="form-group" style="margin-bottom: 16px;">
+              <div class="form-group">
                 <label class="form-label">GitHub Personal Access Token (GHT)</label>
                 <input type="password" class="form-control" id="setting-token" placeholder="ghp_..." required>
-                <small style="color: var(--text-dim); margin-top: 4px;">具備 `repo` 讀寫權限之 GitHub 個人權杖</small>
+                <small style="color: var(--text-dim); margin-top: 4px; display: block;">具備 `repo` 權限之 GitHub 個人權杖 (Token 保存在本機)</small>
               </div>
 
-              <div class="form-grid" style="margin-bottom: 16px;">
+              <div class="form-grid">
                 <div class="form-group">
-                  <label class="form-label">同步分支 (Target Branch)</label>
+                  <label class="form-label">發佈分支 (Target Branch)</label>
                   <input type="text" class="form-control" id="setting-branch" placeholder="main" value="main">
                 </div>
                 <div class="form-group">
-                  <label class="form-label">幣別符號</label>
+                  <label class="form-label">基礎幣別 (Base Currency)</label>
                   <select class="form-control" id="setting-currency">
                     <option value="TWD">新台幣 (TWD / NT$)</option>
                     <option value="USD">美元 (USD / $)</option>
@@ -289,33 +467,41 @@
                 </div>
               </div>
 
-              <div style="background: rgba(15, 23, 42, 0.4); padding: 16px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 20px;">
-                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                  <input type="checkbox" id="setting-auto-sync" checked style="width: 18px; height: 18px; accent-color: var(--primary);">
+              <div class="form-group">
+                <label class="form-label">股票損益紅綠配色習慣</label>
+                <select class="form-control" id="setting-stock-color">
+                  <option value="tw">台灣習慣 (紅漲綠跌 - 紅色代表獲利，綠色代表下跌)</option>
+                  <option value="us">歐美標準 (綠漲紅跌 - 綠色代表獲利，紅色代表下跌)</option>
+                </select>
+              </div>
+
+              <div style="background: rgba(15, 23, 42, 0.45); padding: 18px; border-radius: var(--radius-md); border: var(--glass-border); margin-bottom: 20px;">
+                <label style="display: flex; align-items: center; gap: 12px; cursor: pointer;">
+                  <input type="checkbox" id="setting-auto-sync" checked style="width: 20px; height: 20px; accent-color: var(--primary);">
                   <div>
-                    <strong style="color: var(--text-main);">每次改動自動發佈到 GitHub (Auto-Sync)</strong>
-                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
-                      開啟後，當您建立、修改、借還、送修或刪除資產時，系統將自動於背景將清冊提交並推送到 GitHub 倉庫。
+                    <strong style="color: var(--text-main); font-size: 14px;">每次改動自動發佈到 GitHub (Auto-Sync)</strong>
+                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 3px;">
+                      開啟後，當您新增/修改股票、更新股價、借還資產時，系統將自動於背景將最新清冊備份提交至 GitHub 倉庫。
                     </div>
                   </div>
                 </label>
               </div>
 
-              <div style="background: rgba(15, 23, 42, 0.4); padding: 16px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 20px;">
-                <div style="font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px;">
-                  <i class="fa-solid fa-hard-drive"></i> 本地資料庫儲存路徑
+              <div style="background: rgba(15, 23, 42, 0.45); padding: 18px; border-radius: var(--radius-md); border: var(--glass-border); margin-bottom: 20px;">
+                <div style="font-size: 13px; font-weight: 600; color: #a5b4fc; margin-bottom: 8px;">
+                  <i class="fa-solid fa-hard-drive"></i> 本機資料庫儲存目錄 (完全隱私)
                 </div>
-                <div style="font-family: monospace; font-size: 12px; color: #a5b4fc; word-break: break-all;" id="local-data-path">
+                <div style="font-family: monospace; font-size: 12px; color: #e2e8f0; word-break: break-all;" id="local-data-path">
                   讀取中...
                 </div>
                 <div style="font-size: 11px; color: var(--text-dim); margin-top: 6px;">
-                  數據完整保存在本機硬碟中，具備高容錯與完全隱私控制。
+                  所有實體資產與證券投資數據均直接儲存於您電腦的硬碟中。
                 </div>
               </div>
 
-              <div style="background: rgba(15, 23, 42, 0.4); padding: 16px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 20px;">
-                <div style="font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px;">
-                  <i class="fa-solid fa-circle-nodes"></i> 目前同步狀態
+              <div style="background: rgba(15, 23, 42, 0.45); padding: 18px; border-radius: var(--radius-md); border: var(--glass-border); margin-bottom: 24px;">
+                <div style="font-size: 13px; font-weight: 600; color: #a5b4fc; margin-bottom: 8px;">
+                  <i class="fa-solid fa-circle-nodes"></i> 目前 GitHub 發佈狀態
                 </div>
                 <pre id="settings-sync-status-text" style="font-family: inherit; font-size: 12px; color: var(--text-muted); white-space: pre-wrap;">尚未進行同步</pre>
               </div>
@@ -333,11 +519,179 @@
     </main>
   </div>
 
-  <!-- Modal: Add / Edit Asset -->
+  <!-- ================================================================
+       Modal: Add / Edit Stock (新增 / 編輯股票投資)
+       ================================================================ -->
+  <div class="modal-backdrop" id="modal-stock">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-stock-title">新增股票投資標的</h3>
+        <button type="button" class="btn btn-secondary btn-icon btn-close-modal">✕</button>
+      </div>
+
+      <form id="stock-form">
+        <input type="hidden" id="stock-field-id">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">股票代號 * (如: 2330, NVDA, 0050)</label>
+              <input type="text" class="form-control" id="stock-field-symbol" placeholder="例如: 2330" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">標的名稱 *</label>
+              <input type="text" class="form-control" id="stock-field-name" placeholder="例如: 台積電" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">市場分類 *</label>
+              <select class="form-control" id="stock-field-market">
+                <option value="台股">台股 (TW)</option>
+                <option value="美股">美股 (US)</option>
+                <option value="ETF">ETF 指數基金</option>
+                <option value="基金">共同基金</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">計價幣別 *</label>
+              <select class="form-control" id="stock-field-currency">
+                <option value="TWD">新台幣 (TWD)</option>
+                <option value="USD">美元 (USD)</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 16px; margin-top: 6px;">
+            <div style="font-size: 13px; font-weight: 600; color: #a5b4fc; margin-bottom: 12px;">
+              <i class="fa-solid fa-calculator"></i> 持股股數與價格試算
+            </div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">持有股數 (Shares) *</label>
+                <input type="number" class="form-control" id="stock-field-shares" step="any" min="0.0001" placeholder="例如: 1000" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">買進均價單價 (Buy Price) *</label>
+                <input type="number" class="form-control" id="stock-field-buy-price" step="any" min="0.0001" placeholder="例如: 920.0" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">當前市價單價 (Current Price) *</label>
+                <input type="number" class="form-control" id="stock-field-current-price" step="any" min="0.0001" placeholder="例如: 1050.0" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">換算匯率 (若幣別為USD，預設32.0)</label>
+                <input type="number" class="form-control" id="stock-field-rate" step="0.01" value="1.0">
+              </div>
+            </div>
+
+            <!-- Real-time PnL Calculation Preview -->
+            <div id="stock-preview-box" style="background: rgba(15, 23, 42, 0.5); padding: 12px 16px; border-radius: var(--radius-sm); border: var(--glass-border); margin-top: 10px;">
+              <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted);">
+                <span>預估投資總成本: <strong id="stock-prev-cost" style="color: #fff;">NT$0</strong></span>
+                <span>預估當前總市值: <strong id="stock-prev-market" style="color: #fff;">NT$0</strong></span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; margin-top: 6px;">
+                <span>未實現損益: <span id="stock-prev-pnl">NT$0</span></span>
+                <span>投資報酬率: <span id="stock-prev-roi">0.0%</span></span>
+              </div>
+            </div>
+          </div>
+
+          <div style="border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 16px; margin-top: 14px;">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">預估年化殖利率 % (選填)</label>
+                <input type="number" class="form-control" id="stock-field-yield" step="0.1" placeholder="例如: 3.5">
+              </div>
+              <div class="form-group">
+                <label class="form-label">經手人員</label>
+                <input type="text" class="form-control" id="stock-field-operator" value="投資人">
+              </div>
+              <div class="form-full form-group">
+                <label class="form-label">投資筆記與策略備註</label>
+                <textarea class="form-control" id="stock-field-notes" rows="2" placeholder="設定停損停利目標、定期定額領息或產業題材筆記..."></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-close-modal">取消</button>
+          <button type="submit" class="btn btn-success">
+            <i class="fa-solid fa-check"></i> 確認儲存股票
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       Modal: Batch Update Stock Prices (批次更新股價行情)
+       ================================================================ -->
+  <div class="modal-backdrop" id="modal-batch-prices">
+    <div class="modal-box" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3 class="modal-title">批次更新股票最新市價</h3>
+        <button type="button" class="btn btn-secondary btn-icon btn-close-modal">✕</button>
+      </div>
+
+      <form id="batch-prices-form">
+        <div class="modal-body">
+          <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
+            直接在下方填寫各檔股票的最新市場報價，點擊確認將一鍵重新試算全投資組合損益與總淨資產：
+          </p>
+          <div id="batch-prices-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 50vh; overflow-y: auto;">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-close-modal">取消</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="fa-solid fa-arrows-rotate"></i> 更新全部行情
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       Modal: Quick Update Single Stock Price (快速調整單檔市價)
+       ================================================================ -->
+  <div class="modal-backdrop" id="modal-quick-price">
+    <div class="modal-box" style="max-width: 420px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="quick-price-stock-title">更新即時市價</h3>
+        <button type="button" class="btn btn-secondary btn-icon btn-close-modal">✕</button>
+      </div>
+
+      <form id="quick-price-form">
+        <input type="hidden" id="quick-price-stock-id">
+        <div class="modal-body">
+          <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;" id="quick-price-stock-info">
+            原持有均價: -
+          </div>
+          <div class="form-group">
+            <label class="form-label">最新當前市價單價 *</label>
+            <input type="number" class="form-control" id="quick-price-val" step="any" min="0.0001" required autofocus>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-close-modal">取消</button>
+          <button type="submit" class="btn btn-success">
+            <i class="fa-solid fa-check"></i> 更新報價
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       Modal: Add / Edit Asset (新增 / 編輯實體資產)
+       ================================================================ -->
   <div class="modal-backdrop" id="modal-asset">
     <div class="modal-box">
       <div class="modal-header">
-        <h3 class="modal-title" id="modal-asset-title">新增資產建檔</h3>
+        <h3 class="modal-title" id="modal-asset-title">新增實體資產建檔</h3>
         <button type="button" class="btn btn-secondary btn-icon btn-close-modal">✕</button>
       </div>
 
@@ -346,7 +700,7 @@
           <div class="form-grid">
             <div class="form-group">
               <label class="form-label">資產編號 (留空則自動編碼)</label>
-              <input type="text" class="form-control" id="field-id" placeholder="AST-20261013-001">
+              <input type="text" class="form-control" id="field-id" placeholder="AST-20261015-XXXX">
             </div>
             <div class="form-group">
               <label class="form-label">資產名稱 *</label>
@@ -364,7 +718,7 @@
               </select>
             </div>
             <div class="form-group">
-              <label class="form-label">狀態 *</label>
+              <label class="form-label">運作狀態 *</label>
               <select class="form-control" id="field-status">
                 <option value="在用中">在用中</option>
                 <option value="閒置中">閒置中</option>
@@ -382,13 +736,13 @@
               <input type="text" class="form-control" id="field-model" placeholder="例如: M4 Max / U3223QE">
             </div>
             <div class="form-full form-group">
-              <label class="form-label">原廠序號 (S/N)</label>
+              <label class="form-label">原廠產品序號 (S/N)</label>
               <input type="text" class="form-control" id="field-sn" placeholder="輸入產品序號或條碼碼段">
             </div>
           </div>
 
-          <div style="border-top: 1px solid var(--border-color); padding-top: 16px;">
-            <div style="font-size: 13px; font-weight: 600; color: #818cf8; margin-bottom: 12px;">
+          <div style="border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 16px; margin-top: 6px;">
+            <div style="font-size: 13px; font-weight: 600; color: #a5b4fc; margin-bottom: 12px;">
               <i class="fa-solid fa-calculator"></i> 購置與折舊試算
             </div>
             <div class="form-grid">
@@ -409,13 +763,13 @@
                 <input type="date" class="form-control" id="field-warranty">
               </div>
             </div>
-            <div id="depreciation-preview" style="margin-top: 8px; font-size: 12px; color: var(--success); font-weight: 500;">
+            <div id="depreciation-preview" style="margin-top: 8px; font-size: 12px; color: var(--success); font-weight: 600;">
               直線折舊公式預估現值: NT$0
             </div>
           </div>
 
-          <div style="border-top: 1px solid var(--border-color); padding-top: 16px;">
-            <div style="font-size: 13px; font-weight: 600; color: #818cf8; margin-bottom: 12px;">
+          <div style="border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 16px; margin-top: 14px;">
+            <div style="font-size: 13px; font-weight: 600; color: #a5b4fc; margin-bottom: 12px;">
               <i class="fa-solid fa-location-dot"></i> 保管與存放指派
             </div>
             <div class="form-grid">
@@ -446,14 +800,16 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary btn-close-modal">取消</button>
           <button type="submit" class="btn btn-primary">
-            <i class="fa-solid fa-check"></i> 確認儲存
+            <i class="fa-solid fa-check"></i> 確認儲存資產
           </button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Modal: Operations (借還 / 送修 / 報廢) -->
+  <!-- ================================================================
+       Modal: Asset Operations (借調 / 送修 / 報廢)
+       ================================================================ -->
   <div class="modal-backdrop" id="modal-operation">
     <div class="modal-box" style="max-width: 500px;">
       <div class="modal-header">
@@ -464,7 +820,7 @@
       <form id="operation-form">
         <input type="hidden" id="op-asset-id">
         <div class="modal-body">
-          <div style="font-weight: 600; color: #818cf8; margin-bottom: 8px;" id="op-asset-name-display">
+          <div style="font-weight: 700; color: #a5b4fc; margin-bottom: 12px; font-size: 15px;" id="op-asset-name-display">
             選擇資產
           </div>
 
@@ -492,7 +848,7 @@
 
           <div class="form-group">
             <label class="form-label">保管人 / 借調人變更</label>
-            <input type="text" class="form-control" id="op-custodian" placeholder="輸入借出對象或新保管人">
+            <input type="text" class="form-control" id="op-custodian" placeholder="輸入借調對象或新保管人">
           </div>
 
           <div class="form-group">
@@ -501,34 +857,36 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label">異動備註 / 原因說明</label>
-            <textarea class="form-control" id="op-notes" rows="3" placeholder="例如: 借調用於專案展示，預計一週後歸還..."></textarea>
+            <label class="form-label">異動原因 / 說明</label>
+            <textarea class="form-control" id="op-notes" rows="3" placeholder="例如: 借調用於產品發佈會，預計一週後歸還..."></textarea>
           </div>
         </div>
 
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary btn-close-modal">取消</button>
           <button type="submit" class="btn btn-primary">
-            <i class="fa-solid fa-arrow-right-arrow-left"></i> 確認異動
+            <i class="fa-solid fa-arrows-rotate"></i> 確認異動
           </button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Modal: Delete Confirmation -->
+  <!-- ================================================================
+       Modal: Delete Confirmation (刪除確認)
+       ================================================================ -->
   <div class="modal-backdrop" id="modal-delete">
     <div class="modal-box" style="max-width: 440px;">
       <div class="modal-header">
-        <h3 class="modal-title" style="color: var(--danger);">確認刪除資產</h3>
+        <h3 class="modal-title" style="color: var(--danger);" id="delete-modal-title">確認刪除</h3>
         <button type="button" class="btn btn-secondary btn-icon btn-close-modal">✕</button>
       </div>
       <div class="modal-body">
-        <p style="color: var(--text-muted); font-size: 14px;">您確定要將下列資產從本機資料庫與雲端記錄中永久刪除嗎？</p>
-        <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); padding: 12px; border-radius: 8px; margin-top: 10px;">
-          <strong id="delete-asset-name-target" style="color: #f87171; font-size: 14px;">AST-...</strong>
+        <p style="color: var(--text-muted); font-size: 14px;" id="delete-modal-prompt">您確定要將下列項目永久刪除嗎？</p>
+        <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); padding: 12px 16px; border-radius: var(--radius-sm); margin-top: 12px;">
+          <strong id="delete-name-target" style="color: #f87171; font-size: 14px;">-</strong>
         </div>
-        <p style="font-size: 12px; color: var(--text-dim); margin-top: 8px;">此操作將記錄於審計日誌中，請謹慎執行。</p>
+        <p style="font-size: 12px; color: var(--text-dim); margin-top: 10px;">此操作會同步至審計日誌與 GitHub，請謹慎執行。</p>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary btn-close-modal">取消</button>
@@ -539,7 +897,7 @@
     </div>
   </div>
 
-  <!-- Toast Container -->
+  <!-- Toast Notification Container -->
   <div class="toast-container" id="toast-container"></div>
 
   <script src="app.js"></script>

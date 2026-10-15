@@ -1,10 +1,9 @@
-use crate::models::{AppSettings, Asset, AssetLog, DashboardStats};
+use crate::models::{AppSettings, Asset, AssetLog, DashboardStats, StockAsset, StockSummary};
 use chrono::{Local, NaiveDate};
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 pub struct StorageManager {
@@ -32,6 +31,10 @@ impl StorageManager {
 
     fn assets_file(&self) -> PathBuf {
         self.data_dir.join("assets.json")
+    }
+
+    fn stocks_file(&self) -> PathBuf {
+        self.data_dir.join("stocks.json")
     }
 
     fn logs_file(&self) -> PathBuf {
@@ -64,10 +67,94 @@ impl StorageManager {
             }
         }
 
+        let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+
+        // Init sample stocks if missing
+        let stocks_path = self.stocks_file();
+        if !stocks_path.exists() {
+            let sample_stocks = vec![
+                StockAsset {
+                    id: "STK-2330".to_string(),
+                    symbol: "2330".to_string(),
+                    name: "台積電 (TSMC)".to_string(),
+                    market: "台股".to_string(),
+                    shares: 1000.0,
+                    buy_price: 920.0,
+                    current_price: 1050.0,
+                    currency: "TWD".to_string(),
+                    exchange_rate: 1.0,
+                    total_cost_twd: 920000.0,
+                    market_value_twd: 1050000.0,
+                    unrealized_pnl_twd: 130000.0,
+                    return_rate: 14.13,
+                    dividend_yield: Some(1.8),
+                    notes: "核心半導體龍頭長線部位，定期定額領息".to_string(),
+                    updated_at: now.clone(),
+                },
+                StockAsset {
+                    id: "STK-0050".to_string(),
+                    symbol: "0050".to_string(),
+                    name: "元大台灣卓越50 ETF".to_string(),
+                    market: "ETF".to_string(),
+                    shares: 2000.0,
+                    buy_price: 175.0,
+                    current_price: 192.5,
+                    currency: "TWD".to_string(),
+                    exchange_rate: 1.0,
+                    total_cost_twd: 350000.0,
+                    market_value_twd: 385000.0,
+                    unrealized_pnl_twd: 35000.0,
+                    return_rate: 10.0,
+                    dividend_yield: Some(3.2),
+                    notes: "追蹤台灣前50大市值企業，大盤核心資產配置".to_string(),
+                    updated_at: now.clone(),
+                },
+                StockAsset {
+                    id: "STK-NVDA".to_string(),
+                    symbol: "NVDA".to_string(),
+                    name: "NVIDIA Corporation".to_string(),
+                    market: "美股".to_string(),
+                    shares: 60.0,
+                    buy_price: 118.0,
+                    current_price: 138.5,
+                    currency: "USD".to_string(),
+                    exchange_rate: 32.0,
+                    total_cost_twd: 226560.0,
+                    market_value_twd: 265920.0,
+                    unrealized_pnl_twd: 39360.0,
+                    return_rate: 17.37,
+                    dividend_yield: Some(0.1),
+                    notes: "AI加速計算晶片霸主，AI運算趨勢核心成長股".to_string(),
+                    updated_at: now.clone(),
+                },
+                StockAsset {
+                    id: "STK-AAPL".to_string(),
+                    symbol: "AAPL".to_string(),
+                    name: "Apple Inc.".to_string(),
+                    market: "美股".to_string(),
+                    shares: 40.0,
+                    buy_price: 215.0,
+                    current_price: 232.0,
+                    currency: "USD".to_string(),
+                    exchange_rate: 32.0,
+                    total_cost_twd: 275200.0,
+                    market_value_twd: 296960.0,
+                    unrealized_pnl_twd: 21760.0,
+                    return_rate: 7.91,
+                    dividend_yield: Some(0.5),
+                    notes: "消費性電子與生態系護城河，現金流充沛穩定".to_string(),
+                    updated_at: now.clone(),
+                },
+            ];
+
+            if let Ok(json) = serde_json::to_string_pretty(&sample_stocks) {
+                let _ = self.write_atomic(&stocks_path, &json);
+            }
+        }
+
         // Init sample assets if missing or empty
         let assets_path = self.assets_file();
         if !assets_path.exists() {
-            let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
             let sample_assets = vec![
                 Asset {
                     id: "AST-2026-001".to_string(),
@@ -189,7 +276,7 @@ impl StorageManager {
                     location: "原廠授權維修中心".to_string(),
                     department: "產品設計部".to_string(),
                     custodian: "王UI設計師".to_string(),
-                    warranty_date: Some("2026-10-25".to_string()), // 即將到期保固
+                    warranty_date: Some("2026-10-25".to_string()),
                     notes: "觸控螢幕異常送修中，維修單號: RE-2026-891".to_string(),
                     tags: vec!["平板".to_string(), "設計測試".to_string()],
                     created_at: now.clone(),
@@ -205,29 +292,20 @@ impl StorageManager {
             let sample_logs = vec![
                 AssetLog {
                     id: Uuid::new_v4().to_string(),
+                    asset_id: "STK-2330".to_string(),
+                    asset_name: "台積電 (2330)".to_string(),
+                    action: "買入股票".to_string(),
+                    operator: "投資人".to_string(),
+                    details: "買入 1,000 股，成交均價 NT$920，建立台股長線持股".to_string(),
+                    timestamp: now.clone(),
+                },
+                AssetLog {
+                    id: Uuid::new_v4().to_string(),
                     asset_id: "AST-2026-001".to_string(),
                     asset_name: "MacBook Pro 16吋 (M4 Max / 64GB / 2TB)".to_string(),
                     action: "建立".to_string(),
                     operator: "系統管理員".to_string(),
-                    details: "初始資產建檔完成，指派保管人: hankyle".to_string(),
-                    timestamp: now.clone(),
-                },
-                AssetLog {
-                    id: Uuid::new_v4().to_string(),
-                    asset_id: "AST-2026-005".to_string(),
-                    asset_name: "Sony A7 IV 全片幅無反單眼相機機身".to_string(),
-                    action: "借出".to_string(),
-                    operator: "設備管理員".to_string(),
-                    details: "借調至行銷部拍攝戶外活動宣傳片，保管人變更為: 林攝影師".to_string(),
-                    timestamp: now.clone(),
-                },
-                AssetLog {
-                    id: Uuid::new_v4().to_string(),
-                    asset_id: "AST-2026-006".to_string(),
-                    asset_name: "iPad Pro 13吋 (M4 / 256GB / Wi-Fi)".to_string(),
-                    action: "送修".to_string(),
-                    operator: "資訊維運部".to_string(),
-                    details: "觸控面板反應延遲，送回原廠授權維修檢測".to_string(),
+                    details: "初始固定資產建檔完成，指派保管人: hankyle".to_string(),
                     timestamp: now.clone(),
                 },
             ];
@@ -263,6 +341,28 @@ impl StorageManager {
         }
     }
 
+    pub fn calculate_stock_metrics(stock: &mut StockAsset) {
+        let rate = if stock.currency == "USD" {
+            if stock.exchange_rate > 0.0 {
+                stock.exchange_rate
+            } else {
+                32.0
+            }
+        } else {
+            1.0
+        };
+
+        stock.total_cost_twd = (stock.shares * stock.buy_price * rate * 100.0).round() / 100.0;
+        stock.market_value_twd = (stock.shares * stock.current_price * rate * 100.0).round() / 100.0;
+        stock.unrealized_pnl_twd = ((stock.market_value_twd - stock.total_cost_twd) * 100.0).round() / 100.0;
+
+        if stock.total_cost_twd > 0.0 {
+            stock.return_rate = ((stock.unrealized_pnl_twd / stock.total_cost_twd) * 10000.0).round() / 100.0;
+        } else {
+            stock.return_rate = 0.0;
+        }
+    }
+
     pub fn load_assets(&self) -> Vec<Asset> {
         let path = self.assets_file();
         if let Ok(content) = fs::read_to_string(&path) {
@@ -281,6 +381,24 @@ impl StorageManager {
         self.write_atomic(self.assets_file(), &json)
     }
 
+    pub fn load_stocks(&self) -> Vec<StockAsset> {
+        let path = self.stocks_file();
+        if let Ok(content) = fs::read_to_string(&path) {
+            if let Ok(mut list) = serde_json::from_str::<Vec<StockAsset>>(&content) {
+                for stock in &mut list {
+                    Self::calculate_stock_metrics(stock);
+                }
+                return list;
+            }
+        }
+        Vec::new()
+    }
+
+    pub fn save_stocks(&self, stocks: &[StockAsset]) -> Result<(), String> {
+        let json = serde_json::to_string_pretty(stocks).map_err(|e| e.to_string())?;
+        self.write_atomic(self.stocks_file(), &json)
+    }
+
     pub fn load_logs(&self) -> Vec<AssetLog> {
         let path = self.logs_file();
         if let Ok(content) = fs::read_to_string(&path) {
@@ -293,7 +411,7 @@ impl StorageManager {
 
     pub fn add_log(&self, log: AssetLog) -> Result<(), String> {
         let mut logs = self.load_logs();
-        logs.insert(0, log); // Newest first
+        logs.insert(0, log);
         if logs.len() > 1000 {
             logs.truncate(1000);
         }
@@ -316,9 +434,40 @@ impl StorageManager {
         self.write_atomic(self.settings_file(), &json)
     }
 
+    pub fn get_stock_summary(&self) -> StockSummary {
+        let stocks = self.load_stocks();
+        let total_stock_count = stocks.len();
+        let mut total_cost_twd = 0.0;
+        let mut total_market_value_twd = 0.0;
+        let mut market_distribution = HashMap::new();
+
+        for s in &stocks {
+            total_cost_twd += s.total_cost_twd;
+            total_market_value_twd += s.market_value_twd;
+            *market_distribution.entry(s.market.clone()).or_insert(0.0) += s.market_value_twd;
+        }
+
+        let total_unrealized_pnl_twd = ((total_market_value_twd - total_cost_twd) * 100.0).round() / 100.0;
+        let total_return_rate = if total_cost_twd > 0.0 {
+            ((total_unrealized_pnl_twd / total_cost_twd) * 10000.0).round() / 100.0
+        } else {
+            0.0
+        };
+
+        StockSummary {
+            total_stock_count,
+            total_cost_twd: (total_cost_twd * 100.0).round() / 100.0,
+            total_market_value_twd: (total_market_value_twd * 100.0).round() / 100.0,
+            total_unrealized_pnl_twd,
+            total_return_rate,
+            market_distribution,
+        }
+    }
+
     pub fn get_dashboard_stats(&self) -> DashboardStats {
         let assets = self.load_assets();
         let logs = self.load_logs();
+        let stock_summary = self.get_stock_summary();
 
         let total_count = assets.len();
         let mut total_original_value = 0.0;
@@ -354,6 +503,7 @@ impl StorageManager {
             }
         }
 
+        let total_net_worth_twd = ((total_current_value + stock_summary.total_market_value_twd) * 100.0).round() / 100.0;
         let recent_logs = logs.into_iter().take(10).collect();
 
         DashboardStats {
@@ -366,8 +516,10 @@ impl StorageManager {
             borrowed_count,
             repairing_count,
             recent_logs,
+            stock_summary,
+            total_net_worth_twd,
         }
     }
 }
 
-pub type AppState = Arc<Mutex<StorageManager>>;
+pub type AppState = std::sync::Arc<std::sync::Mutex<StorageManager>>;

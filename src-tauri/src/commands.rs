@@ -1,7 +1,8 @@
 use crate::github_sync::GitHubSyncEngine;
-use crate::models::{AppSettings, Asset, AssetLog, DashboardStats, SyncResult};
+use crate::models::{AppSettings, Asset, AssetLog, DashboardStats, StockAsset, StockSummary, SyncResult};
 use crate::storage::{AppState, StorageManager};
 use chrono::Local;
+use std::collections::HashMap;
 use tauri::State;
 use uuid::Uuid;
 
@@ -98,14 +99,20 @@ pub async fn save_asset(
     };
 
     // Auto-sync to GitHub if configured
-    let (auto_sync, settings, all_assets, all_logs) = {
+    let (auto_sync, settings, all_assets, all_stocks, all_logs) = {
         let storage = state.lock().map_err(|e| e.to_string())?;
         let s = storage.load_settings();
-        (s.auto_sync, s, storage.load_assets(), storage.load_logs())
+        (
+            s.auto_sync,
+            s,
+            storage.load_assets(),
+            storage.load_stocks(),
+            storage.load_logs(),
+        )
     };
 
     if auto_sync {
-        let res = GitHubSyncEngine::sync_to_github(&settings, &all_assets, &all_logs).await;
+        let res = GitHubSyncEngine::sync_to_github(&settings, &all_assets, &all_stocks, &all_logs).await;
         if let Ok(storage) = state.lock() {
             let mut s = storage.load_settings();
             s.last_sync_time = Some(res.timestamp);
@@ -130,7 +137,7 @@ pub async fn delete_asset(
         operator
     };
 
-    let (auto_sync, settings, all_assets, all_logs) = {
+    let (auto_sync, settings, all_assets, all_stocks, all_logs) = {
         let storage = state.lock().map_err(|e| e.to_string())?;
         let mut assets = storage.load_assets();
         let deleted_name = if let Some(pos) = assets.iter().position(|a| a.id == id) {
@@ -154,11 +161,17 @@ pub async fn delete_asset(
         let _ = storage.add_log(log);
 
         let s = storage.load_settings();
-        (s.auto_sync, s, storage.load_assets(), storage.load_logs())
+        (
+            s.auto_sync,
+            s,
+            storage.load_assets(),
+            storage.load_stocks(),
+            storage.load_logs(),
+        )
     };
 
     if auto_sync {
-        let res = GitHubSyncEngine::sync_to_github(&settings, &all_assets, &all_logs).await;
+        let res = GitHubSyncEngine::sync_to_github(&settings, &all_assets, &all_stocks, &all_logs).await;
         if let Ok(storage) = state.lock() {
             let mut s = storage.load_settings();
             s.last_sync_time = Some(res.timestamp);
@@ -226,14 +239,20 @@ pub async fn update_asset_status(
     };
 
     // Auto-sync
-    let (auto_sync, settings, all_assets, all_logs) = {
+    let (auto_sync, settings, all_assets, all_stocks, all_logs) = {
         let storage = state.lock().map_err(|e| e.to_string())?;
         let s = storage.load_settings();
-        (s.auto_sync, s, storage.load_assets(), storage.load_logs())
+        (
+            s.auto_sync,
+            s,
+            storage.load_assets(),
+            storage.load_stocks(),
+            storage.load_logs(),
+        )
     };
 
     if auto_sync {
-        let res = GitHubSyncEngine::sync_to_github(&settings, &all_assets, &all_logs).await;
+        let res = GitHubSyncEngine::sync_to_github(&settings, &all_assets, &all_stocks, &all_logs).await;
         if let Ok(storage) = state.lock() {
             let mut s = storage.load_settings();
             s.last_sync_time = Some(res.timestamp);
@@ -271,16 +290,17 @@ pub fn save_settings(state: State<AppState>, settings: AppSettings) -> Result<()
 
 #[tauri::command]
 pub async fn sync_to_github_now(state: State<'_, AppState>) -> Result<SyncResult, String> {
-    let (settings, assets, logs) = {
+    let (settings, assets, stocks, logs) = {
         let storage = state.lock().map_err(|e| e.to_string())?;
         (
             storage.load_settings(),
             storage.load_assets(),
+            storage.load_stocks(),
             storage.load_logs(),
         )
     };
 
-    let result = GitHubSyncEngine::sync_to_github(&settings, &assets, &logs).await;
+    let result = GitHubSyncEngine::sync_to_github(&settings, &assets, &stocks, &logs).await;
 
     if let Ok(storage) = state.lock() {
         let mut s = storage.load_settings();
@@ -293,10 +313,280 @@ pub async fn sync_to_github_now(state: State<'_, AppState>) -> Result<SyncResult
 }
 
 #[tauri::command]
+pub fn get_stocks(state: State<AppState>) -> Result<Vec<StockAsset>, String> {
+    let storage = state.lock().map_err(|e| e.to_string())?;
+    Ok(storage.load_stocks())
+}
+
+#[tauri::command]
+pub fn get_stock_summary(state: State<AppState>) -> Result<StockSummary, String> {
+    let storage = state.lock().map_err(|e| e.to_string())?;
+    Ok(storage.get_stock_summary())
+}
+
+#[tauri::command]
+pub async fn save_stock(
+    state: State<'_, AppState>,
+    mut stock: StockAsset,
+    operator: String,
+) -> Result<StockAsset, String> {
+    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let is_new = stock.id.trim().is_empty();
+    if is_new {
+        stock.id = format!("STK-{}", stock.symbol.trim().to_uppercase());
+    }
+    stock.updated_at = now.clone();
+
+    StorageManager::calculate_stock_metrics(&mut stock);
+
+    let (saved_stock, _action, _details) = {
+        let storage = state.lock().map_err(|e| e.to_string())?;
+        let mut stocks = storage.load_stocks();
+
+        let (act, det) = if is_new {
+            stocks.push(stock.clone());
+            (
+                "買入股票".to_string(),
+                format!(
+                    "新增持股: {} ({}), 股數: {}, 成本單價: {} {}",
+                    stock.name, stock.symbol, stock.shares, stock.buy_price, stock.currency
+                ),
+            )
+        } else {
+            if let Some(pos) = stocks.iter().position(|s| s.id == stock.id) {
+                stocks[pos] = stock.clone();
+                (
+                    "更新股票".to_string(),
+                    format!(
+                        "修改持股: {} ({}), 現價: {} {}, 市值: NT$ {:.2}",
+                        stock.name, stock.symbol, stock.current_price, stock.currency, stock.market_value_twd
+                    ),
+                )
+            } else {
+                stocks.push(stock.clone());
+                (
+                    "買入股票".to_string(),
+                    format!("新增持股: {} ({})", stock.name, stock.symbol),
+                )
+            }
+        };
+
+        storage.save_stocks(&stocks)?;
+
+        let op = if operator.trim().is_empty() {
+            "投資人".to_string()
+        } else {
+            operator
+        };
+
+        let log = AssetLog {
+            id: Uuid::new_v4().to_string(),
+            asset_id: stock.id.clone(),
+            asset_name: format!("{} ({})", stock.name, stock.symbol),
+            action: act.clone(),
+            operator: op,
+            details: det.clone(),
+            timestamp: now.clone(),
+        };
+        let _ = storage.add_log(log);
+
+        (stock, act, det)
+    };
+
+    let (auto_sync, settings, all_assets, all_stocks, all_logs) = {
+        let storage = state.lock().map_err(|e| e.to_string())?;
+        let s = storage.load_settings();
+        (
+            s.auto_sync,
+            s,
+            storage.load_assets(),
+            storage.load_stocks(),
+            storage.load_logs(),
+        )
+    };
+
+    if auto_sync {
+        let res = GitHubSyncEngine::sync_to_github(&settings, &all_assets, &all_stocks, &all_logs).await;
+        if let Ok(storage) = state.lock() {
+            let mut s = storage.load_settings();
+            s.last_sync_time = Some(res.timestamp);
+            s.last_sync_status = Some(res.message);
+            let _ = storage.save_settings(&s);
+        }
+    }
+
+    Ok(saved_stock)
+}
+
+#[tauri::command]
+pub async fn delete_stock(
+    state: State<'_, AppState>,
+    id: String,
+    operator: String,
+) -> Result<(), String> {
+    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let op = if operator.trim().is_empty() {
+        "投資人".to_string()
+    } else {
+        operator
+    };
+
+    let (auto_sync, settings, all_assets, all_stocks, all_logs) = {
+        let storage = state.lock().map_err(|e| e.to_string())?;
+        let mut stocks = storage.load_stocks();
+        let deleted_name = if let Some(pos) = stocks.iter().position(|s| s.id == id) {
+            let name = format!("{} ({})", stocks[pos].name, stocks[pos].symbol);
+            stocks.remove(pos);
+            storage.save_stocks(&stocks)?;
+            name
+        } else {
+            return Err(format!("找不到股票 ID: {}", id));
+        };
+
+        let log = AssetLog {
+            id: Uuid::new_v4().to_string(),
+            asset_id: id.clone(),
+            asset_name: deleted_name.clone(),
+            action: "賣出股票".to_string(),
+            operator: op,
+            details: format!("已自投資清單結清/刪除標的: {}", deleted_name),
+            timestamp: now,
+        };
+        let _ = storage.add_log(log);
+
+        let s = storage.load_settings();
+        (
+            s.auto_sync,
+            s,
+            storage.load_assets(),
+            storage.load_stocks(),
+            storage.load_logs(),
+        )
+    };
+
+    if auto_sync {
+        let res = GitHubSyncEngine::sync_to_github(&settings, &all_assets, &all_stocks, &all_logs).await;
+        if let Ok(storage) = state.lock() {
+            let mut s = storage.load_settings();
+            s.last_sync_time = Some(res.timestamp);
+            s.last_sync_status = Some(res.message);
+            let _ = storage.save_settings(&s);
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn batch_update_stock_prices(
+    state: State<'_, AppState>,
+    updates: HashMap<String, f64>,
+    operator: String,
+) -> Result<Vec<StockAsset>, String> {
+    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let op = if operator.trim().is_empty() {
+        "行情更新員".to_string()
+    } else {
+        operator
+    };
+
+    let updated_stocks = {
+        let storage = state.lock().map_err(|e| e.to_string())?;
+        let mut stocks = storage.load_stocks();
+        let mut count = 0;
+
+        for s in &mut stocks {
+            if let Some(&new_price) = updates.get(&s.id).or_else(|| updates.get(&s.symbol)) {
+                if new_price > 0.0 {
+                    s.current_price = new_price;
+                    s.updated_at = now.clone();
+                    StorageManager::calculate_stock_metrics(s);
+                    count += 1;
+                }
+            }
+        }
+
+        storage.save_stocks(&stocks)?;
+
+        let log = AssetLog {
+            id: Uuid::new_v4().to_string(),
+            asset_id: "STOCK-PRICE-UPDATE".to_string(),
+            asset_name: "更新股票市價".to_string(),
+            action: "更新股價".to_string(),
+            operator: op,
+            details: format!("批次更新 {} 檔證券當前市場行情", count),
+            timestamp: now,
+        };
+        let _ = storage.add_log(log);
+
+        stocks
+    };
+
+    let (auto_sync, settings, all_assets, all_stocks, all_logs) = {
+        let storage = state.lock().map_err(|e| e.to_string())?;
+        let s = storage.load_settings();
+        (
+            s.auto_sync,
+            s,
+            storage.load_assets(),
+            storage.load_stocks(),
+            storage.load_logs(),
+        )
+    };
+
+    if auto_sync {
+        let res = GitHubSyncEngine::sync_to_github(&settings, &all_assets, &all_stocks, &all_logs).await;
+        if let Ok(storage) = state.lock() {
+            let mut s = storage.load_settings();
+            s.last_sync_time = Some(res.timestamp);
+            s.last_sync_status = Some(res.message);
+            let _ = storage.save_settings(&s);
+        }
+    }
+
+    Ok(updated_stocks)
+}
+
+#[tauri::command]
+pub fn export_stocks_csv(state: State<AppState>) -> Result<String, String> {
+    let storage = state.lock().map_err(|e| e.to_string())?;
+    let stocks = storage.load_stocks();
+    let mut csv = String::from(
+        "\u{FEFF}股票代號,股票名稱,市場分類,持有股數,買入成本單價,當前市場單價,幣別,匯率,總成本(TWD),總市值(TWD),未實現損益(TWD),投資報酬率(%),最後更新時間,筆記\n",
+    );
+    for s in stocks {
+        csv.push_str(&format!(
+            "\"{}\",\"{}\",\"{}\",{},{},{},\"{}\",{},{},{},{},{},\"{}\",\"{}\"\n",
+            s.symbol.replace('"', "\"\""),
+            s.name.replace('"', "\"\""),
+            s.market.replace('"', "\"\""),
+            s.shares,
+            s.buy_price,
+            s.current_price,
+            s.currency,
+            s.exchange_rate,
+            s.total_cost_twd,
+            s.market_value_twd,
+            s.unrealized_pnl_twd,
+            s.return_rate,
+            s.updated_at,
+            s.notes.replace('"', "\"\"")
+        ));
+    }
+    Ok(csv)
+}
+
+#[tauri::command]
 pub fn export_assets_json(state: State<AppState>) -> Result<String, String> {
     let storage = state.lock().map_err(|e| e.to_string())?;
     let assets = storage.load_assets();
-    serde_json::to_string_pretty(&assets).map_err(|e| e.to_string())
+    let stocks = storage.load_stocks();
+    let payload = serde_json::json!({
+        "assets": assets,
+        "stocks": stocks,
+        "exported_at": Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+    });
+    serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -336,10 +626,9 @@ pub fn import_assets_json(
     json_str: String,
     operator: String,
 ) -> Result<usize, String> {
-    let imported_list: Vec<Asset> =
+    let parsed: serde_json::Value =
         serde_json::from_str(&json_str).map_err(|e| format!("JSON 格式解析錯誤: {}", e))?;
 
-    let count = imported_list.len();
     let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let op = if operator.trim().is_empty() {
         "批次匯入員".to_string()
@@ -348,31 +637,62 @@ pub fn import_assets_json(
     };
 
     let storage = state.lock().map_err(|e| e.to_string())?;
-    let mut current_assets = storage.load_assets();
+    let mut total_imported = 0;
 
-    for mut new_item in imported_list {
-        StorageManager::calculate_depreciation(&mut new_item);
-        if let Some(pos) = current_assets.iter().position(|a| a.id == new_item.id) {
-            current_assets[pos] = new_item;
-        } else {
-            current_assets.push(new_item);
+    // Check if it's an object with "assets" or a raw array of assets
+    let assets_to_import: Vec<Asset> = if let Some(arr) = parsed.get("assets") {
+        serde_json::from_value(arr.clone()).unwrap_or_default()
+    } else if parsed.is_array() {
+        serde_json::from_value(parsed.clone()).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
+    if !assets_to_import.is_empty() {
+        let mut current_assets = storage.load_assets();
+        let count = assets_to_import.len();
+        for mut new_item in assets_to_import {
+            StorageManager::calculate_depreciation(&mut new_item);
+            if let Some(pos) = current_assets.iter().position(|a| a.id == new_item.id) {
+                current_assets[pos] = new_item;
+            } else {
+                current_assets.push(new_item);
+            }
         }
+        storage.save_assets(&current_assets)?;
+        total_imported += count;
     }
 
-    storage.save_assets(&current_assets)?;
+    // Check if it contains "stocks"
+    if let Some(stocks_val) = parsed.get("stocks") {
+        if let Ok(stocks_to_import) = serde_json::from_value::<Vec<StockAsset>>(stocks_val.clone()) {
+            let mut current_stocks = storage.load_stocks();
+            let count = stocks_to_import.len();
+            for mut new_stock in stocks_to_import {
+                StorageManager::calculate_stock_metrics(&mut new_stock);
+                if let Some(pos) = current_stocks.iter().position(|s| s.id == new_stock.id) {
+                    current_stocks[pos] = new_stock;
+                } else {
+                    current_stocks.push(new_stock);
+                }
+            }
+            storage.save_stocks(&current_stocks)?;
+            total_imported += count;
+        }
+    }
 
     let log = AssetLog {
         id: Uuid::new_v4().to_string(),
         asset_id: "BATCH-IMPORT".to_string(),
-        asset_name: format!("批次匯入 {} 筆資產", count),
+        asset_name: format!("批次匯入 {} 筆項目", total_imported),
         action: "匯入".to_string(),
         operator: op,
-        details: format!("成功從 JSON 匯入/更新 {} 筆資產資料", count),
+        details: format!("成功從 JSON 匯入/更新 {} 筆資產及股票資料", total_imported),
         timestamp: now,
     };
     let _ = storage.add_log(log);
 
-    Ok(count)
+    Ok(total_imported)
 }
 
 #[tauri::command]

@@ -29,7 +29,13 @@ fn main() {
             commands::export_assets_json,
             commands::export_assets_csv,
             commands::import_assets_json,
-            commands::get_data_folder_path
+            commands::get_data_folder_path,
+            commands::get_stocks,
+            commands::get_stock_summary,
+            commands::save_stock,
+            commands::delete_stock,
+            commands::batch_update_stock_prices,
+            commands::export_stocks_csv
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

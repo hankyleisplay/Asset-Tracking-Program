@@ -1,4 +1,4 @@
-use crate::models::{AppSettings, Asset, AssetLog, SyncResult};
+use crate::models::{AppSettings, Asset, AssetLog, StockAsset, SyncResult};
 use base64::prelude::*;
 use chrono::Local;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT};
@@ -25,6 +25,7 @@ impl GitHubSyncEngine {
     pub async fn sync_to_github(
         settings: &AppSettings,
         assets: &[Asset],
+        stocks: &[StockAsset],
         logs: &[AssetLog],
     ) -> SyncResult {
         let (owner, repo) = Self::clean_repo_string(&settings.github_repo);
@@ -46,11 +47,20 @@ impl GitHubSyncEngine {
 
         let now_str = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
+        let total_assets_value: f64 = assets.iter().map(|a| a.current_value).sum();
+        let total_stocks_value: f64 = stocks.iter().map(|s| s.market_value_twd).sum();
+        let total_stocks_cost: f64 = stocks.iter().map(|s| s.total_cost_twd).sum();
+        let total_stocks_pnl = total_stocks_value - total_stocks_cost;
+        let total_net_worth = total_assets_value + total_stocks_value;
+
         // 1. Prepare JSON backup
         let backup_payload = json!({
             "updated_at": now_str,
             "total_assets": assets.len(),
+            "total_stocks": stocks.len(),
+            "total_net_worth_twd": total_net_worth,
             "assets": assets,
+            "stocks": stocks,
             "recent_logs": logs.iter().take(50).collect::<Vec<_>>()
         });
 
@@ -68,14 +78,30 @@ impl GitHubSyncEngine {
 
         // 2. Prepare Human-readable Markdown inventory report
         let mut md_report = String::new();
-        md_report.push_str(&format!("# 📦 資產清冊即時備份報告 (Asset Tracking Inventory)\n\n"));
-        md_report.push_str(&format!("- **更新時間**: {}\n", now_str));
-        md_report.push_str(&format!("- **資產總數**: {} 筆\n\n", assets.len()));
+        md_report.push_str("# 💎 資產追蹤與證券投資即時備份報告 (Asset Tracking & Portfolio Report)\n\n");
+        md_report.push_str(&format!("- **最後同步時間**: {}\n", now_str));
+        md_report.push_str(&format!("- **總淨資產估值**: NT$ {:.2}\n", total_net_worth));
+        md_report.push_str(&format!("- **實體固定資產**: {} 筆 (預估現值 NT$ {:.2})\n", assets.len(), total_assets_value));
+        md_report.push_str(&format!("- **證券投資標的**: {} 筆 (總市值 NT$ {:.2} / 未實現損益 NT$ {:+.2})\n\n", stocks.len(), total_stocks_value, total_stocks_pnl));
+
+        md_report.push_str("## 📈 證券股票投資組合 (Stock & Securities Portfolio)\n\n");
+        md_report.push_str("| 代號 | 名稱 | 市場 | 持有股數 | 買進均價 | 當前市價 | 幣別 | 投資市值 (TWD) | 未實現損益 (TWD) | 報酬率 |\n");
+        md_report.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
+        for s in stocks {
+            let pnl_sign = if s.unrealized_pnl_twd >= 0.0 { "+" } else { "" };
+            md_report.push_str(&format!(
+                "| {} | {} | {} | {:.2} | {:.2} | {:.2} | {} | NT$ {:.2} | {}{:.2} | {}{:.2}% |\n",
+                s.symbol, s.name, s.market, s.shares, s.buy_price, s.current_price, s.currency, s.market_value_twd, pnl_sign, s.unrealized_pnl_twd, pnl_sign, s.return_rate
+            ));
+        }
+        md_report.push_str("\n---\n\n");
+
+        md_report.push_str("## 🏢 實體固定資產清冊 (Physical Assets Inventory)\n\n");
         md_report.push_str("| 資產編號 | 名稱 | 分類 | 狀態 | 保管人 | 存放地點 | 購買價格 (TWD) | 當前預估現值 |\n");
         md_report.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
         for a in assets {
             md_report.push_str(&format!(
-                "| {} | {} | {} | {} | {} | {} | ${:.2} | ${:.2} |\n",
+                "| {} | {} | {} | {} | {} | {} | NT$ {:.2} | NT$ {:.2} |\n",
                 a.id, a.name, a.category, a.status, a.custodian, a.location, a.purchase_price, a.current_value
             ));
         }
