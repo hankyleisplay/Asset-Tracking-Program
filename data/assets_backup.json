@@ -1,0 +1,164 @@
+{
+  "assets": [
+    {
+      "brand": "Dell",
+      "category": "3C與電腦",
+      "created_at": "2026-10-13 19:37:40",
+      "current_value": 16685.22,
+      "custodian": "hankyle",
+      "department": "技術研發部",
+      "depreciation_years": 4,
+      "id": "AST-2026-002",
+      "location": "台北研發中心 4F-A區",
+      "model": "U3223QE",
+      "name": "Dell UltraSharp 32吋 4K 專業螢幕",
+      "notes": "支援Type-C 90W供電與RJ-45網路輸出",
+      "purchase_date": "2025-06-20",
+      "purchase_price": 24900.0,
+      "serial_number": "CN0482914801",
+      "status": "在用中",
+      "tags": [
+        "螢幕",
+        "外接顯示器"
+      ],
+      "updated_at": "2026-10-13 19:37:40",
+      "warranty_date": "2028-06-20"
+    },
+    {
+      "brand": "Herman Miller",
+      "category": "辦公家具",
+      "created_at": "2026-10-13 19:37:40",
+      "current_value": 42845.72,
+      "custodian": "hankyle",
+      "department": "管理部",
+      "depreciation_years": 10,
+      "id": "AST-2026-003",
+      "location": "台北研發中心 主管辦公室",
+      "model": "Aeron B Size",
+      "name": "Herman Miller Aeron 人體工學旗艦辦公椅",
+      "notes": "12年原廠結構保固",
+      "purchase_date": "2025-01-10",
+      "purchase_price": 52000.0,
+      "serial_number": "HM-AERON-202509",
+      "status": "在用中",
+      "tags": [
+        "辦公椅",
+        "人體工學"
+      ],
+      "updated_at": "2026-10-13 19:37:40",
+      "warranty_date": "2037-01-10"
+    },
+    {
+      "brand": "Synology",
+      "category": "伺服器與網路",
+      "created_at": "2026-10-13 19:37:40",
+      "current_value": 10436.96,
+      "custodian": "網管工程師",
+      "department": "資訊維運部",
+      "depreciation_years": 3,
+      "id": "AST-2026-004",
+      "location": "機房 機架A-02",
+      "model": "DS923+",
+      "name": "Synology DS923+ 4-Bay 網路儲存伺服器",
+      "notes": "裝載4顆Seagate IronWolf 16TB，RAID 6配置",
+      "purchase_date": "2024-08-05",
+      "purchase_price": 38800.0,
+      "serial_number": "22B0SDN91823",
+      "status": "在用中",
+      "tags": [
+        "NAS",
+        "本地備份"
+      ],
+      "updated_at": "2026-10-13 19:37:40",
+      "warranty_date": "2027-08-05"
+    },
+    {
+      "brand": "Sony",
+      "category": "視聽攝影設備",
+      "created_at": "2026-10-13 19:37:40",
+      "current_value": 34602.63,
+      "custodian": "林攝影師",
+      "department": "行銷公關部",
+      "depreciation_years": 4,
+      "id": "AST-2026-005",
+      "location": "外借 (行銷活動拍攝)",
+      "model": "ILCE-7M4",
+      "name": "Sony A7 IV 全片幅無反單眼相機機身",
+      "notes": "借出時間: 2026-10-10，預計2026-10-20歸還",
+      "purchase_date": "2024-12-01",
+      "purchase_price": 64980.0,
+      "serial_number": "S01-4920194",
+      "status": "外借中",
+      "tags": [
+        "相機",
+        "攝影器材"
+      ],
+      "updated_at": "2026-10-13 19:37:40",
+      "warranty_date": "2026-12-01"
+    },
+    {
+      "brand": "Apple",
+      "category": "3C與電腦",
+      "created_at": "2026-10-13 19:37:40",
+      "current_value": 13854.83,
+      "custodian": "王UI設計師",
+      "department": "產品設計部",
+      "depreciation_years": 3,
+      "id": "AST-2026-006",
+      "location": "原廠授權維修中心",
+      "model": "iPad Pro 13 (2024)",
+      "name": "iPad Pro 13吋 (M4 / 256GB / Wi-Fi)",
+      "notes": "觸控螢幕異常送修中，維修單號: RE-2026-891",
+      "purchase_date": "2024-09-10",
+      "purchase_price": 45900.0,
+      "serial_number": "DMPT9081KA",
+      "status": "維修中",
+      "tags": [
+        "平板",
+        "設計測試"
+      ],
+      "updated_at": "2026-10-13 19:37:40",
+      "warranty_date": "2026-10-25"
+    }
+  ],
+  "recent_logs": [
+    {
+      "action": "刪除",
+      "asset_id": "AST-2026-001",
+      "asset_name": "MacBook Pro 16吋 (M4 Max / 64GB / 2TB)",
+      "details": "已自系統刪除資產: MacBook Pro 16吋 (M4 Max / 64GB / 2TB) (AST-2026-001)",
+      "id": "9416e2ad-7cf4-450a-9b3c-829e371a0fd8",
+      "operator": "使用者",
+      "timestamp": "2026-10-15 20:38:57"
+    },
+    {
+      "action": "建立",
+      "asset_id": "AST-2026-001",
+      "asset_name": "MacBook Pro 16吋 (M4 Max / 64GB / 2TB)",
+      "details": "初始資產建檔完成，指派保管人: hankyle",
+      "id": "46fd432f-c7d4-41c4-b602-0aff3ae47b10",
+      "operator": "系統管理員",
+      "timestamp": "2026-10-13 19:37:40"
+    },
+    {
+      "action": "借出",
+      "asset_id": "AST-2026-005",
+      "asset_name": "Sony A7 IV 全片幅無反單眼相機機身",
+      "details": "借調至行銷部拍攝戶外活動宣傳片，保管人變更為: 林攝影師",
+      "id": "877d0f2a-fe70-4813-8a91-c36564ea2c6f",
+      "operator": "設備管理員",
+      "timestamp": "2026-10-13 19:37:40"
+    },
+    {
+      "action": "送修",
+      "asset_id": "AST-2026-006",
+      "asset_name": "iPad Pro 13吋 (M4 / 256GB / Wi-Fi)",
+      "details": "觸控面板反應延遲，送回原廠授權維修檢測",
+      "id": "6d454ee8-5336-4c4a-beb8-d465ef204e3f",
+      "operator": "資訊維運部",
+      "timestamp": "2026-10-13 19:37:40"
+    }
+  ],
+  "total_assets": 5,
+  "updated_at": "2026-10-15 20:38:57"
+}
