@@ -1,30 +1,6 @@
 {
   "assets": [
     {
-      "brand": "Dell",
-      "category": "3C與電腦",
-      "created_at": "2026-10-13 19:37:40",
-      "current_value": 16685.22,
-      "custodian": "hankyle",
-      "department": "技術研發部",
-      "depreciation_years": 4,
-      "id": "AST-2026-002",
-      "location": "台北研發中心 4F-A區",
-      "model": "U3223QE",
-      "name": "Dell UltraSharp 32吋 4K 專業螢幕",
-      "notes": "支援Type-C 90W供電與RJ-45網路輸出",
-      "purchase_date": "2025-06-20",
-      "purchase_price": 24900.0,
-      "serial_number": "CN0482914801",
-      "status": "在用中",
-      "tags": [
-        "螢幕",
-        "外接顯示器"
-      ],
-      "updated_at": "2026-10-13 19:37:40",
-      "warranty_date": "2028-06-20"
-    },
-    {
       "brand": "Herman Miller",
       "category": "辦公家具",
       "created_at": "2026-10-13 19:37:40",
@@ -124,6 +100,15 @@
   "recent_logs": [
     {
       "action": "刪除",
+      "asset_id": "AST-2026-002",
+      "asset_name": "Dell UltraSharp 32吋 4K 專業螢幕",
+      "details": "已自系統刪除資產: Dell UltraSharp 32吋 4K 專業螢幕 (AST-2026-002)",
+      "id": "c05e47d0-110d-4490-88b6-d28841e2b27f",
+      "operator": "使用者",
+      "timestamp": "2026-10-15 20:39:03"
+    },
+    {
+      "action": "刪除",
       "asset_id": "AST-2026-001",
       "asset_name": "MacBook Pro 16吋 (M4 Max / 64GB / 2TB)",
       "details": "已自系統刪除資產: MacBook Pro 16吋 (M4 Max / 64GB / 2TB) (AST-2026-001)",
@@ -159,6 +144,6 @@
       "timestamp": "2026-10-13 19:37:40"
     }
   ],
-  "total_assets": 5,
-  "updated_at": "2026-10-15 20:38:57"
+  "total_assets": 4,
+  "updated_at": "2026-10-15 20:39:03"
 }
