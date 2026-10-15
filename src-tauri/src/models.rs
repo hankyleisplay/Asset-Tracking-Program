@@ -45,6 +45,19 @@ pub struct StockAsset {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StockQuote {
+    pub symbol: String,
+    pub name: String,
+    pub market: String, // 台股, 美股, ETF
+    pub current_price: f64,
+    pub currency: String, // TWD, USD
+    pub exchange_rate: f64,
+    pub change: f64,
+    pub change_percent: f64,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StockSummary {
     pub total_stock_count: usize,
     pub total_cost_twd: f64,

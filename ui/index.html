@@ -294,8 +294,11 @@
               <button type="button" class="btn btn-secondary btn-sm" id="btn-export-stocks-csv" title="匯出股票清單 CSV">
                 <i class="fa-solid fa-file-csv"></i> 匯出 CSV
               </button>
-              <button type="button" class="btn btn-secondary btn-sm" id="btn-batch-update-prices" title="快速更新所有股票市價">
-                <i class="fa-solid fa-arrows-rotate"></i> 批次更新現價
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-batch-update-prices" title="手動微調各股票市價">
+                <i class="fa-solid fa-pen-to-square"></i> 手動調整
+              </button>
+              <button type="button" class="btn btn-primary btn-sm" id="btn-auto-update-live-quotes" title="連線自動抓取全市場即時最新行情 (台股/美股/ETF)">
+                <i class="fa-solid fa-bolt"></i> 自動連線更新行情
               </button>
               <button type="button" class="btn btn-success btn-sm" id="btn-add-stock">
                 <i class="fa-solid fa-plus"></i> 新增股票標的
@@ -513,6 +516,23 @@
               </div>
             </form>
           </div>
+
+          <div class="card" style="max-width: 820px; margin: 24px auto 0 auto; border: 1px solid rgba(239, 68, 68, 0.3);">
+            <div class="card-header">
+              <div class="card-title" style="color: #f87171;">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <span>資料庫重設 / 乾淨狀態 (Clean Slate)</span>
+              </div>
+            </div>
+            <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+              若您想將本機系統完全重設為全新狀態（清空所有實體資產、股票持股與異動日誌，不留任何預設範例資料），可點擊下方按鈕：
+            </div>
+            <div style="display: flex; justify-content: flex-end;">
+              <button type="button" class="btn btn-danger" id="btn-clear-all-data">
+                <i class="fa-solid fa-trash-can"></i> 清空全系統資料 (乾淨初使化)
+              </button>
+            </div>
+          </div>
         </section>
 
       </div>
@@ -533,9 +553,15 @@
         <input type="hidden" id="stock-field-id">
         <div class="modal-body">
           <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label">股票代號 * (如: 2330, NVDA, 0050)</label>
-              <input type="text" class="form-control" id="stock-field-symbol" placeholder="例如: 2330" required>
+            <div class="form-group" style="position: relative;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label class="form-label" style="margin-bottom: 0;">股票代號 * (如 2330, NVDA, 0050)</label>
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-fetch-symbol-quote" style="padding: 2px 10px; font-size: 11px;">
+                  <i class="fa-solid fa-bolt"></i> 自動辨識與抓取
+                </button>
+              </div>
+              <input type="text" class="form-control" id="stock-field-symbol" placeholder="輸入 2330 或 NVDA 自動識別" required>
+              <div id="stock-symbol-detect-tip" style="font-size: 11px; color: #a5b4fc; margin-top: 4px; display: none;"></div>
             </div>
             <div class="form-group">
               <label class="form-label">標的名稱 *</label>

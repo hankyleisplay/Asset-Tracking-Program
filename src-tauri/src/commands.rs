@@ -1,5 +1,5 @@
 use crate::github_sync::GitHubSyncEngine;
-use crate::models::{AppSettings, Asset, AssetLog, DashboardStats, StockAsset, StockSummary, SyncResult};
+use crate::models::{AppSettings, Asset, AssetLog, DashboardStats, StockAsset, StockQuote, StockSummary, SyncResult};
 use crate::storage::{AppState, StorageManager};
 use chrono::Local;
 use std::collections::HashMap;
@@ -699,4 +699,291 @@ pub fn import_assets_json(
 pub fn get_data_folder_path(state: State<AppState>) -> Result<String, String> {
     let storage = state.lock().map_err(|e| e.to_string())?;
     Ok(storage.get_data_dir().to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub async fn clear_all_system_data(state: State<'_, AppState>) -> Result<(), String> {
+    let storage = state.lock().map_err(|e| e.to_string())?;
+    storage.clear_all_data()
+}
+
+fn lookup_tw_stock_name(code: &str) -> Option<&'static str> {
+    match code {
+        "2330" => Some("台積電 (TSMC)"),
+        "2317" => Some("鴻海 (Hon Hai)"),
+        "2454" => Some("聯發科 (MediaTek)"),
+        "2308" => Some("台達電"),
+        "2382" => Some("廣達 (Quanta)"),
+        "2412" => Some("中華電 (Chunghwa Telecom)"),
+        "2881" => Some("富邦金"),
+        "2882" => Some("國泰金"),
+        "2886" => Some("兆豐金"),
+        "2891" => Some("中信金"),
+        "2603" => Some("長榮海運"),
+        "2609" => Some("陽明海運"),
+        "2615" => Some("萬海航運"),
+        "2303" => Some("聯電 (UMC)"),
+        "3231" => Some("緯創 (Wistron)"),
+        "2357" => Some("華碩 (ASUS)"),
+        "3008" => Some("大立光 (Largan)"),
+        "3711" => Some("日月光投控 (ASE)"),
+        "2002" => Some("中鋼"),
+        "6505" => Some("台塑化"),
+        "0050" => Some("元大台灣50 ETF"),
+        "0056" => Some("元大高股息 ETF"),
+        "00878" => Some("國泰永續高股息 ETF"),
+        "00919" => Some("群益台灣精選高息 ETF"),
+        "00929" => Some("復華台灣科技優息 ETF"),
+        "00940" => Some("元大台灣價值高息 ETF"),
+        "006208" => Some("富邦台灣采吉50 ETF"),
+        "00713" => Some("元大台灣高息低波 ETF"),
+        "00679B" => Some("元大美債20年 ETF"),
+        "00687B" => Some("國泰20年美債 ETF"),
+        _ => None,
+    }
+}
+
+async fn query_yahoo_finance(
+    client: &reqwest::Client,
+    ticker: &str,
+) -> Result<(String, f64, f64, f64, String), String> {
+    let url = format!(
+        "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1d&range=1d",
+        ticker
+    );
+
+    let resp = client
+        .get(&url)
+        .header(
+            reqwest::header::USER_AGENT,
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        )
+        .send()
+        .await
+        .map_err(|e| format!("網絡請求失敗 ({}): {}", ticker, e))?;
+
+    if !resp.status().is_success() {
+        return Err(format!(
+            "查詢股票代號 [{}] 失敗，HTTP 代碼: {}",
+            ticker,
+            resp.status()
+        ));
+    }
+
+    let json_val: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("解析市場數據失敗: {}", e))?;
+
+    let result = json_val
+        .get("chart")
+        .and_then(|c| c.get("result"))
+        .and_then(|r| r.get(0))
+        .ok_or_else(|| format!("未找到 [{}] 的市場報價資訊", ticker))?;
+
+    let meta = result
+        .get("meta")
+        .ok_or_else(|| format!("報價缺少元資料 [{}]", ticker))?;
+
+    let price = meta
+        .get("regularMarketPrice")
+        .and_then(|p| p.as_f64())
+        .unwrap_or(0.0);
+
+    if price <= 0.0 {
+        return Err(format!("標的 [{}] 目前無有效市價行情", ticker));
+    }
+
+    let currency = meta
+        .get("currency")
+        .and_then(|c| c.as_str())
+        .unwrap_or("TWD")
+        .to_string();
+
+    let name = meta
+        .get("longName")
+        .or_else(|| meta.get("shortName"))
+        .and_then(|n| n.as_str())
+        .unwrap_or(ticker)
+        .to_string();
+
+    let change = meta
+        .get("fulldayChange")
+        .or_else(|| meta.get("regularMarketChange"))
+        .and_then(|c| c.as_f64())
+        .unwrap_or(0.0);
+
+    let change_percent = meta
+        .get("regularMarketChangePercent")
+        .or_else(|| meta.get("fulldayChangePercent"))
+        .and_then(|c| c.as_f64())
+        .unwrap_or(0.0);
+
+    Ok((name, price, change, change_percent, currency))
+}
+
+async fn fetch_single_quote(
+    client: &reqwest::Client,
+    symbol_input: &str,
+) -> Result<StockQuote, String> {
+    let raw = symbol_input.trim().to_uppercase();
+    if raw.is_empty() {
+        return Err("股票代號不能為空".to_string());
+    }
+
+    let is_numeric = raw.chars().all(|c| c.is_ascii_digit());
+    let (market, is_tw, primary_ticker, fallback_ticker) = if is_numeric
+        || raw.ends_with(".TW")
+        || raw.ends_with(".TWO")
+    {
+        let base = raw.trim_end_matches(".TW").trim_end_matches(".TWO");
+        let m = if base.starts_with("00") {
+            "ETF".to_string()
+        } else {
+            "台股".to_string()
+        };
+        (m, true, format!("{}.TW", base), Some(format!("{}.TWO", base)))
+    } else {
+        ("美股".to_string(), false, raw.clone(), None)
+    };
+
+    let mut quote_res = query_yahoo_finance(client, &primary_ticker).await;
+    if quote_res.is_err() && fallback_ticker.is_some() {
+        if let Some(ref fb) = fallback_ticker {
+            if let Ok(res) = query_yahoo_finance(client, fb).await {
+                quote_res = Ok(res);
+            }
+        }
+    }
+
+    let (mut quote_name, current_price, change, change_percent, currency) = quote_res?;
+
+    let (currency_out, exchange_rate) = if is_tw {
+        ("TWD".to_string(), 1.0)
+    } else {
+        let rate = match query_yahoo_finance(client, "USDTWD=X").await {
+            Ok((_, r, _, _, _)) if r > 0.0 => (r * 100.0).round() / 100.0,
+            _ => 32.2,
+        };
+        (currency, rate)
+    };
+
+    if is_tw {
+        let base_sym = raw.trim_end_matches(".TW").trim_end_matches(".TWO");
+        if let Some(tw_name) = lookup_tw_stock_name(base_sym) {
+            quote_name = tw_name.to_string();
+        }
+    }
+
+    let now_str = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+
+    Ok(StockQuote {
+        symbol: raw,
+        name: quote_name,
+        market,
+        current_price,
+        currency: currency_out,
+        exchange_rate,
+        change,
+        change_percent,
+        updated_at: now_str,
+    })
+}
+
+#[tauri::command]
+pub async fn fetch_stock_quote(symbol: String) -> Result<StockQuote, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(8))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    fetch_single_quote(&client, &symbol).await
+}
+
+#[tauri::command]
+pub async fn auto_update_all_live_quotes(
+    state: State<'_, AppState>,
+    operator: String,
+) -> Result<Vec<StockAsset>, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let stocks = {
+        let storage = state.lock().map_err(|e| e.to_string())?;
+        storage.load_stocks()
+    };
+
+    if stocks.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let live_rate = match query_yahoo_finance(&client, "USDTWD=X").await {
+        Ok((_, r, _, _, _)) if r > 0.0 => (r * 100.0).round() / 100.0,
+        _ => 32.2,
+    };
+
+    let mut updated_stocks = stocks;
+    let mut updated_count = 0;
+    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+
+    for stock in &mut updated_stocks {
+        if let Ok(quote) = fetch_single_quote(&client, &stock.symbol).await {
+            stock.current_price = quote.current_price;
+            if stock.currency == "USD" {
+                stock.exchange_rate = live_rate;
+            }
+            stock.updated_at = now.clone();
+            StorageManager::calculate_stock_metrics(stock);
+            updated_count += 1;
+        }
+    }
+
+    {
+        let storage = state.lock().map_err(|e| e.to_string())?;
+        storage.save_stocks(&updated_stocks)?;
+
+        let op = if operator.trim().is_empty() {
+            "行情自動連線".to_string()
+        } else {
+            operator
+        };
+
+        let log = AssetLog {
+            id: Uuid::new_v4().to_string(),
+            asset_id: "STOCK-AUTO-REFRESH".to_string(),
+            asset_name: "自動更新系統市場行情".to_string(),
+            action: "更新股價".to_string(),
+            operator: op,
+            details: format!("已自動連線抓取 {} 檔標的最新市場即時報價", updated_count),
+            timestamp: now,
+        };
+        let _ = storage.add_log(log);
+    }
+
+    // Auto-sync if configured
+    let (auto_sync, settings, all_assets, all_stocks, all_logs) = {
+        let storage = state.lock().map_err(|e| e.to_string())?;
+        let s = storage.load_settings();
+        (
+            s.auto_sync,
+            s,
+            storage.load_assets(),
+            storage.load_stocks(),
+            storage.load_logs(),
+        )
+    };
+
+    if auto_sync {
+        let res = GitHubSyncEngine::sync_to_github(&settings, &all_assets, &all_stocks, &all_logs).await;
+        if let Ok(storage) = state.lock() {
+            let mut s = storage.load_settings();
+            s.last_sync_time = Some(res.timestamp);
+            s.last_sync_status = Some(res.message);
+            let _ = storage.save_settings(&s);
+        }
+    }
+
+    Ok(updated_stocks)
 }

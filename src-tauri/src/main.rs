@@ -35,7 +35,10 @@ fn main() {
             commands::save_stock,
             commands::delete_stock,
             commands::batch_update_stock_prices,
-            commands::export_stocks_csv
+            commands::export_stocks_csv,
+            commands::fetch_stock_quote,
+            commands::auto_update_all_live_quotes,
+            commands::clear_all_system_data
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

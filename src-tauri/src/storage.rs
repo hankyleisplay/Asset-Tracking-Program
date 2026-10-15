@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use uuid::Uuid;
 
 pub struct StorageManager {
     data_dir: PathBuf,
@@ -67,254 +66,39 @@ impl StorageManager {
             }
         }
 
-        let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-
-        // Init sample stocks if missing
+        // Init empty stocks if missing
         let stocks_path = self.stocks_file();
         if !stocks_path.exists() {
-            let sample_stocks = vec![
-                StockAsset {
-                    id: "STK-2330".to_string(),
-                    symbol: "2330".to_string(),
-                    name: "台積電 (TSMC)".to_string(),
-                    market: "台股".to_string(),
-                    shares: 1000.0,
-                    buy_price: 920.0,
-                    current_price: 1050.0,
-                    currency: "TWD".to_string(),
-                    exchange_rate: 1.0,
-                    total_cost_twd: 920000.0,
-                    market_value_twd: 1050000.0,
-                    unrealized_pnl_twd: 130000.0,
-                    return_rate: 14.13,
-                    dividend_yield: Some(1.8),
-                    notes: "核心半導體龍頭長線部位，定期定額領息".to_string(),
-                    updated_at: now.clone(),
-                },
-                StockAsset {
-                    id: "STK-0050".to_string(),
-                    symbol: "0050".to_string(),
-                    name: "元大台灣卓越50 ETF".to_string(),
-                    market: "ETF".to_string(),
-                    shares: 2000.0,
-                    buy_price: 175.0,
-                    current_price: 192.5,
-                    currency: "TWD".to_string(),
-                    exchange_rate: 1.0,
-                    total_cost_twd: 350000.0,
-                    market_value_twd: 385000.0,
-                    unrealized_pnl_twd: 35000.0,
-                    return_rate: 10.0,
-                    dividend_yield: Some(3.2),
-                    notes: "追蹤台灣前50大市值企業，大盤核心資產配置".to_string(),
-                    updated_at: now.clone(),
-                },
-                StockAsset {
-                    id: "STK-NVDA".to_string(),
-                    symbol: "NVDA".to_string(),
-                    name: "NVIDIA Corporation".to_string(),
-                    market: "美股".to_string(),
-                    shares: 60.0,
-                    buy_price: 118.0,
-                    current_price: 138.5,
-                    currency: "USD".to_string(),
-                    exchange_rate: 32.0,
-                    total_cost_twd: 226560.0,
-                    market_value_twd: 265920.0,
-                    unrealized_pnl_twd: 39360.0,
-                    return_rate: 17.37,
-                    dividend_yield: Some(0.1),
-                    notes: "AI加速計算晶片霸主，AI運算趨勢核心成長股".to_string(),
-                    updated_at: now.clone(),
-                },
-                StockAsset {
-                    id: "STK-AAPL".to_string(),
-                    symbol: "AAPL".to_string(),
-                    name: "Apple Inc.".to_string(),
-                    market: "美股".to_string(),
-                    shares: 40.0,
-                    buy_price: 215.0,
-                    current_price: 232.0,
-                    currency: "USD".to_string(),
-                    exchange_rate: 32.0,
-                    total_cost_twd: 275200.0,
-                    market_value_twd: 296960.0,
-                    unrealized_pnl_twd: 21760.0,
-                    return_rate: 7.91,
-                    dividend_yield: Some(0.5),
-                    notes: "消費性電子與生態系護城河，現金流充沛穩定".to_string(),
-                    updated_at: now.clone(),
-                },
-            ];
-
-            if let Ok(json) = serde_json::to_string_pretty(&sample_stocks) {
+            let empty_stocks: Vec<StockAsset> = Vec::new();
+            if let Ok(json) = serde_json::to_string_pretty(&empty_stocks) {
                 let _ = self.write_atomic(&stocks_path, &json);
             }
         }
 
-        // Init sample assets if missing or empty
+        // Init empty assets if missing
         let assets_path = self.assets_file();
         if !assets_path.exists() {
-            let sample_assets = vec![
-                Asset {
-                    id: "AST-2026-001".to_string(),
-                    name: "MacBook Pro 16吋 (M4 Max / 64GB / 2TB)".to_string(),
-                    category: "3C與電腦".to_string(),
-                    brand: "Apple".to_string(),
-                    model: "MacBook Pro 16".to_string(),
-                    serial_number: "C02XYZ987KLA".to_string(),
-                    purchase_date: "2025-11-15".to_string(),
-                    purchase_price: 114900.0,
-                    current_value: 95750.0,
-                    depreciation_years: 3,
-                    status: "在用中".to_string(),
-                    location: "台北研發中心 4F-A區".to_string(),
-                    department: "技術研發部".to_string(),
-                    custodian: "hankyle".to_string(),
-                    warranty_date: Some("2028-11-15".to_string()),
-                    notes: "工程開發主要筆電，附原廠140W充電器與MagSafe線".to_string(),
-                    tags: vec!["筆電".to_string(), "高階開發".to_string()],
-                    created_at: now.clone(),
-                    updated_at: now.clone(),
-                },
-                Asset {
-                    id: "AST-2026-002".to_string(),
-                    name: "Dell UltraSharp 32吋 4K 專業螢幕".to_string(),
-                    category: "3C與電腦".to_string(),
-                    brand: "Dell".to_string(),
-                    model: "U3223QE".to_string(),
-                    serial_number: "CN0482914801".to_string(),
-                    purchase_date: "2025-06-20".to_string(),
-                    purchase_price: 24900.0,
-                    current_value: 19500.0,
-                    depreciation_years: 4,
-                    status: "在用中".to_string(),
-                    location: "台北研發中心 4F-A區".to_string(),
-                    department: "技術研發部".to_string(),
-                    custodian: "hankyle".to_string(),
-                    warranty_date: Some("2028-06-20".to_string()),
-                    notes: "支援Type-C 90W供電與RJ-45網路輸出".to_string(),
-                    tags: vec!["螢幕".to_string(), "外接顯示器".to_string()],
-                    created_at: now.clone(),
-                    updated_at: now.clone(),
-                },
-                Asset {
-                    id: "AST-2026-003".to_string(),
-                    name: "Herman Miller Aeron 人體工學旗艦辦公椅".to_string(),
-                    category: "辦公家具".to_string(),
-                    brand: "Herman Miller".to_string(),
-                    model: "Aeron B Size".to_string(),
-                    serial_number: "HM-AERON-202509".to_string(),
-                    purchase_date: "2025-01-10".to_string(),
-                    purchase_price: 52000.0,
-                    current_value: 46800.0,
-                    depreciation_years: 10,
-                    status: "在用中".to_string(),
-                    location: "台北研發中心 主管辦公室".to_string(),
-                    department: "管理部".to_string(),
-                    custodian: "hankyle".to_string(),
-                    warranty_date: Some("2037-01-10".to_string()),
-                    notes: "12年原廠結構保固".to_string(),
-                    tags: vec!["辦公椅".to_string(), "人體工學".to_string()],
-                    created_at: now.clone(),
-                    updated_at: now.clone(),
-                },
-                Asset {
-                    id: "AST-2026-004".to_string(),
-                    name: "Synology DS923+ 4-Bay 網路儲存伺服器".to_string(),
-                    category: "伺服器與網路".to_string(),
-                    brand: "Synology".to_string(),
-                    model: "DS923+".to_string(),
-                    serial_number: "22B0SDN91823".to_string(),
-                    purchase_date: "2024-08-05".to_string(),
-                    purchase_price: 38800.0,
-                    current_value: 23280.0,
-                    depreciation_years: 3,
-                    status: "在用中".to_string(),
-                    location: "機房 機架A-02".to_string(),
-                    department: "資訊維運部".to_string(),
-                    custodian: "網管工程師".to_string(),
-                    warranty_date: Some("2027-08-05".to_string()),
-                    notes: "裝載4顆Seagate IronWolf 16TB，RAID 6配置".to_string(),
-                    tags: vec!["NAS".to_string(), "本地備份".to_string()],
-                    created_at: now.clone(),
-                    updated_at: now.clone(),
-                },
-                Asset {
-                    id: "AST-2026-005".to_string(),
-                    name: "Sony A7 IV 全片幅無反單眼相機機身".to_string(),
-                    category: "視聽攝影設備".to_string(),
-                    brand: "Sony".to_string(),
-                    model: "ILCE-7M4".to_string(),
-                    serial_number: "S01-4920194".to_string(),
-                    purchase_date: "2024-12-01".to_string(),
-                    purchase_price: 64980.0,
-                    current_value: 45000.0,
-                    depreciation_years: 4,
-                    status: "外借中".to_string(),
-                    location: "外借 (行銷活動拍攝)".to_string(),
-                    department: "行銷公關部".to_string(),
-                    custodian: "林攝影師".to_string(),
-                    warranty_date: Some("2026-12-01".to_string()),
-                    notes: "借出時間: 2026-10-10，預計2026-10-20歸還".to_string(),
-                    tags: vec!["相機".to_string(), "攝影器材".to_string()],
-                    created_at: now.clone(),
-                    updated_at: now.clone(),
-                },
-                Asset {
-                    id: "AST-2026-006".to_string(),
-                    name: "iPad Pro 13吋 (M4 / 256GB / Wi-Fi)".to_string(),
-                    category: "3C與電腦".to_string(),
-                    brand: "Apple".to_string(),
-                    model: "iPad Pro 13 (2024)".to_string(),
-                    serial_number: "DMPT9081KA".to_string(),
-                    purchase_date: "2024-09-10".to_string(),
-                    purchase_price: 45900.0,
-                    current_value: 32000.0,
-                    depreciation_years: 3,
-                    status: "維修中".to_string(),
-                    location: "原廠授權維修中心".to_string(),
-                    department: "產品設計部".to_string(),
-                    custodian: "王UI設計師".to_string(),
-                    warranty_date: Some("2026-10-25".to_string()),
-                    notes: "觸控螢幕異常送修中，維修單號: RE-2026-891".to_string(),
-                    tags: vec!["平板".to_string(), "設計測試".to_string()],
-                    created_at: now.clone(),
-                    updated_at: now.clone(),
-                },
-            ];
-
-            if let Ok(json) = serde_json::to_string_pretty(&sample_assets) {
+            let empty_assets: Vec<Asset> = Vec::new();
+            if let Ok(json) = serde_json::to_string_pretty(&empty_assets) {
                 let _ = self.write_atomic(&assets_path, &json);
             }
+        }
 
-            // Init sample logs
-            let sample_logs = vec![
-                AssetLog {
-                    id: Uuid::new_v4().to_string(),
-                    asset_id: "STK-2330".to_string(),
-                    asset_name: "台積電 (2330)".to_string(),
-                    action: "買入股票".to_string(),
-                    operator: "投資人".to_string(),
-                    details: "買入 1,000 股，成交均價 NT$920，建立台股長線持股".to_string(),
-                    timestamp: now.clone(),
-                },
-                AssetLog {
-                    id: Uuid::new_v4().to_string(),
-                    asset_id: "AST-2026-001".to_string(),
-                    asset_name: "MacBook Pro 16吋 (M4 Max / 64GB / 2TB)".to_string(),
-                    action: "建立".to_string(),
-                    operator: "系統管理員".to_string(),
-                    details: "初始固定資產建檔完成，指派保管人: hankyle".to_string(),
-                    timestamp: now.clone(),
-                },
-            ];
-
-            let logs_path = self.logs_file();
-            if let Ok(json) = serde_json::to_string_pretty(&sample_logs) {
+        // Init empty logs if missing
+        let logs_path = self.logs_file();
+        if !logs_path.exists() {
+            let empty_logs: Vec<AssetLog> = Vec::new();
+            if let Ok(json) = serde_json::to_string_pretty(&empty_logs) {
                 let _ = self.write_atomic(&logs_path, &json);
             }
         }
+    }
+
+    pub fn clear_all_data(&self) -> Result<(), String> {
+        self.save_assets(&[])?;
+        self.save_stocks(&[])?;
+        self.write_atomic(self.logs_file(), "[]")?;
+        Ok(())
     }
 
     pub fn calculate_depreciation(asset: &mut Asset) {

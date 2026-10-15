@@ -66,7 +66,8 @@ async function invokeApi(command, args = {}) {
 }
 
 // 3. Mock Database for Standalone Preview / Offline Fallback
-const MOCK_STORAGE_KEY = 'asset_tracking_portfolio_mock_v3';
+// 3. Mock Database for Standalone Preview / Offline Fallback (Clean Slate / 0 預設資料)
+const MOCK_STORAGE_KEY = 'asset_tracking_portfolio_clean_v1';
 
 function getMockDb() {
   try {
@@ -81,237 +82,19 @@ function getMockDb() {
     console.warn('Failed to parse localStorage:', e);
   }
 
+  // 預設不預先填入任何資產或股票資料，保持完全純淨的初始狀態
   const initial = {
-    assets: [
-      {
-        id: "AST-2026-001",
-        name: "MacBook Pro 16吋 (M4 Max / 64GB / 2TB)",
-        category: "3C與電腦",
-        brand: "Apple",
-        model: "MacBook Pro 16",
-        serial_number: "C02XYZ987KLA",
-        purchase_date: "2025-11-15",
-        purchase_price: 114900.0,
-        current_value: 95750.0,
-        depreciation_years: 3,
-        status: "在用中",
-        location: "台北研發中心 4F-A區",
-        department: "技術研發部",
-        custodian: "hankyle",
-        warranty_date: "2028-11-15",
-        notes: "工程開發主要筆電，附原廠140W充電器與MagSafe線",
-        tags: ["筆電", "高階開發"],
-        created_at: "2026-10-15 10:00:00",
-        updated_at: "2026-10-15 10:00:00"
-      },
-      {
-        id: "AST-2026-002",
-        name: "Dell UltraSharp 32吋 4K 專業螢幕",
-        category: "3C與電腦",
-        brand: "Dell",
-        model: "U3223QE",
-        serial_number: "CN0482914801",
-        purchase_date: "2025-06-20",
-        purchase_price: 24900.0,
-        current_value: 19500.0,
-        depreciation_years: 4,
-        status: "在用中",
-        location: "台北研發中心 4F-A區",
-        department: "技術研發部",
-        custodian: "hankyle",
-        warranty_date: "2028-06-20",
-        notes: "支援Type-C 90W供電與RJ-45網路輸出",
-        tags: ["螢幕", "外接顯示器"],
-        created_at: "2026-10-15 10:00:00",
-        updated_at: "2026-10-15 10:00:00"
-      },
-      {
-        id: "AST-2026-003",
-        name: "Herman Miller Aeron 人體工學旗艦辦公椅",
-        category: "辦公家具",
-        brand: "Herman Miller",
-        model: "Aeron B Size",
-        serial_number: "HM-AERON-202509",
-        purchase_date: "2025-01-10",
-        purchase_price: 52000.0,
-        current_value: 46800.0,
-        depreciation_years: 10,
-        status: "在用中",
-        location: "主管辦公室",
-        department: "管理部",
-        custodian: "hankyle",
-        warranty_date: "2037-01-10",
-        notes: "12年原廠結構保固",
-        tags: ["辦公椅", "人體工學"],
-        created_at: "2026-10-15 10:00:00",
-        updated_at: "2026-10-15 10:00:00"
-      },
-      {
-        id: "AST-2026-004",
-        name: "Synology DS923+ 4-Bay 網路儲存伺服器",
-        category: "伺服器與網路",
-        brand: "Synology",
-        model: "DS923+",
-        serial_number: "22B0SDN91823",
-        purchase_date: "2024-08-05",
-        purchase_price: 38800.0,
-        current_value: 23280.0,
-        depreciation_years: 3,
-        status: "在用中",
-        location: "機房 機架A-02",
-        department: "資訊維運部",
-        custodian: "網管工程師",
-        warranty_date: "2027-08-05",
-        notes: "裝載4顆Seagate IronWolf 16TB，RAID 6配置",
-        tags: ["NAS", "本地備份"],
-        created_at: "2026-10-15 10:00:00",
-        updated_at: "2026-10-15 10:00:00"
-      },
-      {
-        id: "AST-2026-005",
-        name: "Sony A7 IV 全片幅無反單眼相機機身",
-        category: "視聽攝影設備",
-        brand: "Sony",
-        model: "ILCE-7M4",
-        serial_number: "S01-4920194",
-        purchase_date: "2024-12-01",
-        purchase_price: 64980.0,
-        current_value: 45000.0,
-        depreciation_years: 4,
-        status: "外借中",
-        location: "外借 (行銷活動拍攝)",
-        department: "行銷公關部",
-        custodian: "林攝影師",
-        warranty_date: "2026-12-01",
-        notes: "借出時間: 2026-10-10，預計2026-10-20歸還",
-        tags: ["相機", "攝影器材"],
-        created_at: "2026-10-15 10:00:00",
-        updated_at: "2026-10-15 10:00:00"
-      },
-      {
-        id: "AST-2026-006",
-        name: "iPad Pro 13吋 (M4 / 256GB / Wi-Fi)",
-        category: "3C與電腦",
-        brand: "Apple",
-        model: "iPad Pro 13 (2024)",
-        serial_number: "DMPT9081KA",
-        purchase_date: "2024-09-10",
-        purchase_price: 45900.0,
-        current_value: 32000.0,
-        depreciation_years: 3,
-        status: "維修中",
-        location: "原廠授權維修中心",
-        department: "產品設計部",
-        custodian: "王UI設計師",
-        warranty_date: "2026-10-25",
-        notes: "觸控螢幕異常送修中",
-        tags: ["平板", "設計測試"],
-        created_at: "2026-10-15 10:00:00",
-        updated_at: "2026-10-15 10:00:00"
-      }
-    ],
-    stocks: [
-      {
-        id: "STK-2330",
-        symbol: "2330",
-        name: "台積電 (TSMC)",
-        market: "台股",
-        shares: 1000.0,
-        buy_price: 920.0,
-        current_price: 1050.0,
-        currency: "TWD",
-        exchange_rate: 1.0,
-        total_cost_twd: 920000.0,
-        market_value_twd: 1050000.0,
-        unrealized_pnl_twd: 130000.0,
-        return_rate: 14.13,
-        dividend_yield: 1.8,
-        notes: "全球晶圓代工龍頭，AI晶片主流供應鏈",
-        updated_at: "2026-10-15 14:30:00"
-      },
-      {
-        id: "STK-0050",
-        symbol: "0050",
-        name: "元大台灣卓越50 ETF",
-        market: "ETF",
-        shares: 2000.0,
-        buy_price: 175.0,
-        current_price: 192.5,
-        currency: "TWD",
-        exchange_rate: 1.0,
-        total_cost_twd: 350000.0,
-        market_value_twd: 385000.0,
-        unrealized_pnl_twd: 35000.0,
-        return_rate: 10.0,
-        dividend_yield: 3.2,
-        notes: "台灣前50大權值股，核心指數投資",
-        updated_at: "2026-10-15 14:30:00"
-      },
-      {
-        id: "STK-NVDA",
-        symbol: "NVDA",
-        name: "NVIDIA Corporation",
-        market: "美股",
-        shares: 60.0,
-        buy_price: 118.0,
-        current_price: 138.5,
-        currency: "USD",
-        exchange_rate: 32.0,
-        total_cost_twd: 226560.0,
-        market_value_twd: 265920.0,
-        unrealized_pnl_twd: 39360.0,
-        return_rate: 17.37,
-        dividend_yield: 0.1,
-        notes: "GPU與AI運算架構絕對領先者",
-        updated_at: "2026-10-15 14:30:00"
-      },
-      {
-        id: "STK-AAPL",
-        symbol: "AAPL",
-        name: "Apple Inc.",
-        market: "美股",
-        shares: 40.0,
-        buy_price: 215.0,
-        current_price: 232.0,
-        currency: "USD",
-        exchange_rate: 32.0,
-        total_cost_twd: 275200.0,
-        market_value_twd: 296960.0,
-        unrealized_pnl_twd: 21760.0,
-        return_rate: 7.91,
-        dividend_yield: 0.5,
-        notes: "消費性電子與服務生態圈長線持股",
-        updated_at: "2026-10-15 14:30:00"
-      }
-    ],
-    logs: [
-      {
-        id: "log-1",
-        asset_id: "STK-2330",
-        asset_name: "台積電 (2330)",
-        action: "買入股票",
-        operator: "投資人",
-        details: "買入 1,000 股，成交均價 NT$920",
-        timestamp: "2026-10-15 09:30:00"
-      },
-      {
-        id: "log-2",
-        asset_id: "AST-2026-001",
-        asset_name: "MacBook Pro 16吋 (M4 Max / 64GB / 2TB)",
-        action: "建立",
-        operator: "系統管理員",
-        details: "初始固定資產建檔完成，指派保管人: hankyle",
-        timestamp: "2026-10-15 10:00:00"
-      }
-    ],
+    assets: [],
+    stocks: [],
+    logs: [],
     settings: {
       currency: "TWD",
       github_repo: "hankyleisplay/Asset-Tracking-Program",
       github_token: "",
       github_branch: "main",
       auto_sync: true,
-      last_sync_time: "2026-10-15 12:00:00",
-      last_sync_status: "本地已就緒",
+      last_sync_time: null,
+      last_sync_status: "待命",
       stock_color_mode: "tw"
     }
   };
@@ -550,6 +333,69 @@ function mockApi(command, args) {
     };
   }
 
+  if (command === 'clear_all_system_data') {
+    db.assets = [];
+    db.stocks = [];
+    db.logs = [];
+    saveMockDb(db);
+    return null;
+  }
+
+  if (command === 'fetch_stock_quote') {
+    const sym = (args.symbol || '').trim().toUpperCase();
+    const isTw = /^\d+/.test(sym) || sym.endsWith('.TW') || sym.endsWith('.TWO');
+    if (isTw) {
+      let name = sym;
+      if (sym.startsWith('2330')) name = '台積電';
+      else if (sym.startsWith('2317')) name = '鴻海';
+      else if (sym.startsWith('2454')) name = '聯發科';
+      else if (sym.startsWith('0050')) name = '元大台灣50';
+      else if (sym.startsWith('0056')) name = '元大高股息';
+      else if (sym.startsWith('00878')) name = '國泰永續高股息';
+      else if (sym.startsWith('00919')) name = '群益台灣精選高息';
+      else if (sym.startsWith('00929')) name = '復華台灣科技優息';
+      return {
+        symbol: sym,
+        name,
+        market: sym.startsWith('00') ? 'ETF' : '台股',
+        current_price: sym.startsWith('2330') ? 1045.0 : 150.0,
+        currency: 'TWD',
+        exchange_rate: 1.0,
+        change: 5.0,
+        change_percent: 0.5,
+        updated_at: new Date().toLocaleTimeString()
+      };
+    } else {
+      let name = sym;
+      if (sym === 'NVDA') name = 'NVIDIA Corporation';
+      else if (sym === 'AAPL') name = 'Apple Inc.';
+      else if (sym === 'MSFT') name = 'Microsoft Corporation';
+      else if (sym === 'TSLA') name = 'Tesla Inc.';
+      else if (sym === 'GOOGL') name = 'Alphabet Inc.';
+      else if (sym === 'AMZN') name = 'Amazon.com Inc.';
+      const isEtf = ['QQQ', 'SPY', 'VOO', 'IVV', 'VTI'].includes(sym);
+      return {
+        symbol: sym,
+        name,
+        market: isEtf ? 'ETF' : '美股',
+        current_price: sym === 'NVDA' ? 138.2 : 230.5,
+        currency: 'USD',
+        exchange_rate: 32.2,
+        change: 2.1,
+        change_percent: 1.5,
+        updated_at: new Date().toLocaleTimeString()
+      };
+    }
+  }
+
+  if (command === 'auto_update_all_live_quotes') {
+    (db.stocks || []).forEach(s => {
+      s.updated_at = new Date().toLocaleString();
+    });
+    saveMockDb(db);
+    return db.stocks || [];
+  }
+
   return null;
 }
 
@@ -686,6 +532,21 @@ function initEventListeners() {
     e.preventDefault();
     exportStocksCsv();
   });
+
+  // 一鍵聯網更新全部股票即時行情
+  document.getElementById('btn-auto-update-live-quotes')?.addEventListener('click', handleAutoUpdateLiveQuotes);
+
+  // 股票代號輸入自動辨識 (美股 / 台股 / ETF)
+  const stockSymbolInput = document.getElementById('stock-field-symbol');
+  if (stockSymbolInput) {
+    stockSymbolInput.addEventListener('input', handleStockSymbolInput);
+  }
+
+  // 股票彈窗內點擊抓取即時報價
+  document.getElementById('btn-fetch-symbol-quote')?.addEventListener('click', handleFetchSymbolQuote);
+
+  // 設定頁面：清空全系統資料重設
+  document.getElementById('btn-clear-all-data')?.addEventListener('click', handleClearAllData);
 
   const stockSearchInput = document.getElementById('stock-search-input');
   if (stockSearchInput) {
@@ -980,10 +841,203 @@ function renderStocksTable() {
   }).join('');
 }
 
+// --- 股票代號自動辨識與即時行情邏輯 ---
+function detectSymbolMarket(rawSymbol) {
+  const s = (rawSymbol || '').trim().toUpperCase();
+  if (!s) return null;
+
+  // 判斷是否為台股/台股ETF代號 (如 2330, 2317, 0050, 00878, 6547.TWO, 2330.TW 等)
+  const isTaiwan = /^\d+/.test(s) || s.endsWith('.TW') || s.endsWith('.TWO');
+  if (isTaiwan) {
+    const isEtf = s.startsWith('00');
+    return {
+      market: isEtf ? 'ETF' : '台股',
+      currency: 'TWD',
+      rate: 1.0,
+      cleanSymbol: s,
+      displayTip: `🎯 識別為【${isEtf ? '台股 ETF' : '台股標的'}】代號 (${s})，自動切換為新台幣 TWD 計價`
+    };
+  } else {
+    // 判斷是否為美股ETF (如 QQQ, SPY, VOO, IVV, SOXX, SMH 等)
+    const isEtf = ['QQQ', 'SPY', 'VOO', 'IVV', 'VTI', 'SOXX', 'SMH', 'DIA', 'IWM', 'ARKK', 'TQQQ', 'SQQQ'].includes(s);
+    return {
+      market: isEtf ? 'ETF' : '美股',
+      currency: 'USD',
+      rate: 32.2,
+      cleanSymbol: s,
+      displayTip: `🎯 識別為【${isEtf ? '美股 ETF' : '美股市場'}】代號 (${s})，自動切換為美元 USD 計價並套用即時匯率`
+    };
+  }
+}
+
+function handleStockSymbolInput(e) {
+  const val = (e.target.value || '').trim().toUpperCase();
+  const tipBox = document.getElementById('stock-symbol-detect-tip');
+  if (!val) {
+    if (tipBox) {
+      tipBox.style.display = 'none';
+      tipBox.innerText = '';
+    }
+    return;
+  }
+
+  const detected = detectSymbolMarket(val);
+  if (detected) {
+    const marketSelect = document.getElementById('stock-field-market');
+    const currencySelect = document.getElementById('stock-field-currency');
+    const rateInput = document.getElementById('stock-field-rate');
+
+    if (marketSelect) marketSelect.value = detected.market;
+    if (currencySelect) currencySelect.value = detected.currency;
+    if (rateInput) {
+      if (detected.currency === 'USD' && (rateInput.value === '1' || rateInput.value === '1.0' || !rateInput.value)) {
+        rateInput.value = detected.rate;
+      } else if (detected.currency === 'TWD') {
+        rateInput.value = 1.0;
+      }
+    }
+
+    if (tipBox) {
+      tipBox.style.display = 'block';
+      tipBox.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> ${detected.displayTip}`;
+    }
+
+    updateStockPnLPreview();
+  }
+}
+
+async function handleFetchSymbolQuote(e) {
+  e.preventDefault();
+  const symbolInput = document.getElementById('stock-field-symbol');
+  const symbol = (symbolInput?.value || '').trim().toUpperCase();
+
+  if (!symbol) {
+    showToast('請先輸入股票代號（例如台股 2330、0050 或美股 NVDA、AAPL）', 'info');
+    symbolInput?.focus();
+    return;
+  }
+
+  const btn = document.getElementById('btn-fetch-symbol-quote');
+  const originalHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 連線抓取中...';
+  }
+
+  const tipBox = document.getElementById('stock-symbol-detect-tip');
+  if (tipBox) {
+    tipBox.style.display = 'block';
+    tipBox.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> 正在連線 Yahoo Finance 抓取 [${escapeHtml(symbol)}] 最新即時報價與匯率...`;
+  }
+
+  try {
+    const quote = await invokeApi('fetch_stock_quote', { symbol });
+    if (quote) {
+      const nameInput = document.getElementById('stock-field-name');
+      const marketSelect = document.getElementById('stock-field-market');
+      const currencySelect = document.getElementById('stock-field-currency');
+      const priceInput = document.getElementById('stock-field-current-price');
+      const rateInput = document.getElementById('stock-field-rate');
+
+      if (quote.name && nameInput) nameInput.value = quote.name;
+      if (quote.market && marketSelect) marketSelect.value = quote.market;
+      if (quote.currency && currencySelect) currencySelect.value = quote.currency;
+      if (quote.current_price && priceInput) priceInput.value = quote.current_price;
+      if (quote.exchange_rate && rateInput) rateInput.value = quote.exchange_rate;
+
+      updateStockPnLPreview();
+
+      if (tipBox) {
+        const sign = (quote.change || 0) >= 0 ? '+' : '';
+        const chgPct = (quote.change_percent || 0).toFixed(2);
+        const color = (quote.change || 0) >= 0 ? '#4ade80' : '#f87171';
+        tipBox.style.display = 'block';
+        tipBox.innerHTML = `
+          <div style="color: #67e8f9; font-weight: 600;">
+            <i class="fa-solid fa-circle-check"></i> ${escapeHtml(quote.name)} (${quote.symbol}) 連線成功
+          </div>
+          <div style="color: var(--text-muted); font-size: 11px; margin-top: 2px;">
+            市場: ${quote.market} · 最新現價: <strong style="color: #fff;">${quote.currency} $${quote.current_price}</strong> 
+            <span style="color: ${color};">(${sign}${quote.change} / ${sign}${chgPct}%)</span> · 匯率: ${quote.exchange_rate}
+          </div>
+        `;
+      }
+
+      showToast(`已成功抓取 ${quote.name} (${quote.symbol}) 最新現價: ${quote.currency} $${quote.current_price}`, 'success');
+    }
+  } catch (err) {
+    console.error('Fetch stock quote failed:', err);
+    if (tipBox) {
+      tipBox.style.display = 'block';
+      tipBox.innerHTML = `<span style="color: #f87171;"><i class="fa-solid fa-triangle-exclamation"></i> 行情抓取未果 (${escapeHtml(err.message || err)})，請手動填寫現價。</span>`;
+    }
+    showToast(`抓取即時行情失敗: ${err.message || err}`, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+    }
+  }
+}
+
+async function handleAutoUpdateLiveQuotes(e) {
+  e.preventDefault();
+  if (!allStocks || allStocks.length === 0) {
+    showToast('目前尚無任何持股標的，請先點擊「新增股票持股」！', 'info');
+    return;
+  }
+
+  const btn = document.getElementById('btn-auto-update-live-quotes');
+  const originalHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 即時行情聯網更新中...';
+  }
+
+  showToast(`正在連線全球金融市場，更新 ${allStocks.length} 檔持股最新市價與匯率...`, 'info');
+
+  try {
+    const updatedStocks = await invokeApi('auto_update_all_live_quotes', { operator: '系統行情自動更新' });
+    if (Array.isArray(updatedStocks)) {
+      allStocks = updatedStocks;
+    }
+    await refreshAllData();
+    showToast(`全部 ${allStocks.length} 檔持股已成功聯網更新至最新行情！`, 'success');
+  } catch (err) {
+    console.error('Auto update all quotes failed:', err);
+    showToast('自動更新行情失敗: ' + (err.message || err), 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+    }
+  }
+}
+
+async function handleClearAllData() {
+  const confirmed = confirm(
+    "【警告：清空全系統資料】\n\n確定要清空所有實體資產、股票持股與異動日誌嗎？\n此操作將使系統回歸全新乾淨狀態（不保留任何預設測試資料）。\n\n您確定要繼續執行嗎？"
+  );
+  if (!confirmed) return;
+
+  try {
+    await invokeApi('clear_all_system_data');
+    showToast('全系統資料庫已成功清空，目前為乾淨初始狀態！', 'success');
+    await refreshAllData();
+  } catch (err) {
+    showToast('清空資料失敗: ' + err, 'error');
+  }
+}
+
 // Open Stock Modal
 function openStockModal(stock = null) {
   const modal = document.getElementById('modal-stock');
   const title = document.getElementById('modal-stock-title');
+  const tipBox = document.getElementById('stock-symbol-detect-tip');
+  if (tipBox) {
+    tipBox.style.display = 'none';
+    tipBox.innerText = '';
+  }
   if (!modal) return;
 
   if (stock) {
@@ -1001,6 +1055,11 @@ function openStockModal(stock = null) {
     document.getElementById('stock-field-yield').value = stock.dividend_yield || '';
     document.getElementById('stock-field-notes').value = stock.notes || '';
     document.getElementById('stock-field-operator').value = '投資人';
+
+    if (tipBox) {
+      tipBox.style.display = 'block';
+      tipBox.innerHTML = `<span style="color: #94a3b8;"><i class="fa-solid fa-clock"></i> 最近更新時間: ${escapeHtml(stock.updated_at || '未記錄')} · 市場: ${stock.market} (${stock.currency})</span>`;
+    }
   } else {
     if (title) title.innerText = '新增股票投資標的';
     document.getElementById('stock-field-id').value = '';
