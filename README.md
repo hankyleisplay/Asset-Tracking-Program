@@ -4,7 +4,6 @@
 [![Powered by Rust](https://img.shields.io/badge/Rust-1.80+-orange.svg?logo=rust)](https://www.rust-lang.org/)
 [![Local Storage](https://img.shields.io/badge/Storage-100%25%20Local%20Safe-emerald.svg)](https://github.com/hankyleisplay/Asset-Tracking-Program)
 [![Mobile Sync](https://img.shields.io/badge/Sync-LAN%20Wi--Fi%202--Way-cyan.svg)](https://github.com/hankyleisplay/Asset-Tracking-Program)
-[![npm version](https://img.shields.io/npm/v/asset-tracking-program.svg?color=cb3837&logo=npm)](https://www.npmjs.com/package/asset-tracking-program)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 一套專為個人與工作室設計的高效能**實體固定資產、全球證券股票投資、被動現金流與財務目標追蹤管理系統**。
@@ -53,26 +52,17 @@
 
 ---
 
-## 🚀 安裝與使用方式
+## 🚀 下載與安裝方式
 
-### 方式 1：使用 npm / npx 一鍵啟動 (推薦)
-電腦只要有安裝 Node.js，無須手動下載安裝檔：
-```bash
-# 免安裝直接啟動
-npx asset-tracking-program
+請前往 [GitHub Releases 最新發布頁面 (v2.0.0)](https://github.com/hankyleisplay/Asset-Tracking-Program/releases/latest)：
 
-# 或全域安裝至電腦
-npm install -g asset-tracking-program
-atp
-```
+### 1. Windows 電腦版
+- **推薦安裝版 (NSIS Setup)**：下載 `Asset.Tracking.Program_2.0.0_x64-setup.exe`，標準 Windows 桌面程式安裝精靈，自動建立桌面捷徑並整合完整更新支援。
+- **免安裝版 (Portable Single EXE)**：下載 `asset-tracking-program.exe`，免安裝直接雙擊即可使用。
 
-### 方式 2：下載 Windows 安裝版或免安裝執行檔
-請前往 [GitHub Releases 最新發布頁面](https://github.com/hankyleisplay/Asset-Tracking-Program/releases/latest)：
-- **Windows 安裝版**：下載 `Asset.Tracking.Program_2.0.0_x64-setup.exe` 執行安裝。
-- **Windows 免安裝單一執行檔**：下載 `asset-tracking-program.exe` 直接雙擊開啟。
-
-### 方式 3：下載 Android 手機版 APK
-至 [GitHub Releases 最新發布頁面](https://github.com/hankyleisplay/Asset-Tracking-Program/releases/latest) 下載 `Asset-Tracking-Mobile_v2.0.0.apk` 安裝至 Android 手機，或在電腦版開啟「手機 APK 與同步」掃描 QR Code 透過手機瀏覽器直接使用。
+### 2. Android 行動版
+- **原生 APK 安裝包**：下載 `Asset-Tracking-Mobile_v2.0.0.apk` 安裝至 Android 手機。
+- **免安裝區網直連**：在電腦版開啟「手機 APK 與同步」功能，手機連上同一個 Wi-Fi 掃描螢幕上的 QR Code 即可免安裝開啟 Web 介面。
 
 ---
 
