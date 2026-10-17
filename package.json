@@ -1,5 +1,5 @@
 {
-  "name": "asset-tracking-program",
+  "name": "@hankyleisplay/asset-tracking-program",
   "version": "2.0.0",
   "description": "資產與證券追蹤系統 (Asset Tracking Program) Windows 桌面版 - 支援股票損益、實體資產折舊、手機雙向同步與自訂主題",
   "main": "bin/cli.js",
@@ -44,5 +44,8 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   }
 }
