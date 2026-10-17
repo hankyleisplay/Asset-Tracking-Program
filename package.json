@@ -1,6 +1,6 @@
 {
   "name": "@hankyleisplay/asset-tracking-program",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "資產與證券追蹤系統 (Asset Tracking Program) Windows 桌面版 - 支援股票損益、實體資產折舊、手機雙向同步與自訂主題",
   "main": "bin/cli.js",
   "bin": {
