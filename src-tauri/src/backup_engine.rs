@@ -18,6 +18,8 @@ impl BackupEngine {
 
         let assets = storage.load_assets();
         let stocks = storage.load_stocks();
+        let dividends = storage.load_dividends();
+        let goals = storage.load_goals();
         let logs = storage.load_logs();
         let mut settings = storage.load_settings();
 
@@ -26,11 +28,17 @@ impl BackupEngine {
         let log_count = logs.len();
 
         let payload = BackupPayload {
-            version: "1.0.0".to_string(),
+            version: "2.0.0".to_string(),
             timestamp: display_ts.clone(),
-            note: if note.is_empty() { "手動建立備份".to_string() } else { note.to_string() },
+            note: if note.is_empty() {
+                "手動建立備份".to_string()
+            } else {
+                note.to_string()
+            },
             assets,
             stocks,
+            dividends,
+            goals,
             logs,
             settings: settings.clone(),
         };
@@ -68,7 +76,11 @@ impl BackupEngine {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("json") {
-                    let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                    let filename = path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
                     if let Ok(content) = fs::read_to_string(&path) {
                         if let Ok(payload) = serde_json::from_str::<BackupPayload>(&content) {
                             let size_kb = (content.len() as f64 / 1024.0 * 10.0).round() / 10.0;
@@ -104,7 +116,6 @@ impl BackupEngine {
         } else {
             let path = storage.backups_dir().join(source);
             if !path.exists() {
-                // Try as raw path
                 if Path::new(source).exists() {
                     fs::read_to_string(source).map_err(|e| e.to_string())?
                 } else {
@@ -123,6 +134,8 @@ impl BackupEngine {
 
         storage.save_assets(&payload.assets)?;
         storage.save_stocks(&payload.stocks)?;
+        storage.save_dividends(&payload.dividends)?;
+        storage.save_goals(&payload.goals)?;
 
         let mut logs = payload.logs;
         logs.insert(
@@ -132,7 +145,11 @@ impl BackupEngine {
                 asset_id: "SYSTEM_RESTORE".to_string(),
                 asset_name: "全系統本機備份還原".to_string(),
                 action: "還原備份".to_string(),
-                operator: if operator.is_empty() { "系統管理員".to_string() } else { operator.to_string() },
+                operator: if operator.is_empty() {
+                    "系統管理員".to_string()
+                } else {
+                    operator.to_string()
+                },
                 details: format!(
                     "成功從備份快照 ({}) 還原，共恢復 {} 筆實體資產與 {} 檔證券持股。",
                     payload.timestamp, asset_count, stock_count
@@ -164,15 +181,19 @@ impl BackupEngine {
     pub fn export_full_backup_json(storage: &StorageManager) -> Result<String, String> {
         let assets = storage.load_assets();
         let stocks = storage.load_stocks();
+        let dividends = storage.load_dividends();
+        let goals = storage.load_goals();
         let logs = storage.load_logs();
         let settings = storage.load_settings();
 
         let payload = BackupPayload {
-            version: "1.0.0".to_string(),
+            version: "2.0.0".to_string(),
             timestamp: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
             note: "本機全量備份匯出".to_string(),
             assets,
             stocks,
+            dividends,
+            goals,
             logs,
             settings,
         };

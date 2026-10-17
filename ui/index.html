@@ -37,13 +37,22 @@
           <span>實體資產清冊</span>
           <span class="nav-badge" id="sidebar-asset-count">0</span>
         </li>
+        <li class="nav-item" data-view="view-wealth">
+          <i class="fa-solid fa-sack-dollar"></i>
+          <span>股息、目標與試算</span>
+          <span class="nav-badge" id="sidebar-wealth-count">0</span>
+        </li>
+        <li class="nav-item" data-view="view-mobile">
+          <i class="fa-solid fa-mobile-screen-button"></i>
+          <span>手機 APK 與同步</span>
+        </li>
         <li class="nav-item" data-view="view-logs">
           <i class="fa-solid fa-clipboard-list"></i>
           <span>異動審計日誌</span>
         </li>
         <li class="nav-item" data-view="view-settings">
-          <i class="fa-solid fa-gear"></i>
-          <span>系統設定與同步</span>
+          <i class="fa-solid fa-palette"></i>
+          <span>配色、更新與備份</span>
         </li>
       </ul>
 
@@ -52,7 +61,7 @@
           <div style="display: flex; align-items: center; gap: 10px;">
             <div class="sync-dot" id="sidebar-backup-dot" style="background: #22c55e; box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);"></div>
             <div>
-              <div style="font-weight: 600; font-size: 13px;" id="sidebar-backup-text">本機安全儲存</div>
+              <div style="font-weight: 600; font-size: 13px;" id="sidebar-backup-text">本機安全儲存 v2.0</div>
               <div style="font-size: 11px; color: var(--text-dim);" id="sidebar-backup-time">備份已就緒</div>
             </div>
           </div>
@@ -67,12 +76,24 @@
       <header class="top-header">
         <div class="page-title-box">
           <h1 id="header-title">總覽儀表板</h1>
-          <p id="header-subtitle">本地持久儲存 · 實體資產折舊試算 · 證券股票損益追蹤 · 本機完整安全備份</p>
+          <p id="header-subtitle">本地持久儲存 · 手機電腦雙向同步 · 股息與財富目標 · 自動更新與動態配色</p>
         </div>
         <div class="header-actions">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-header-theme" title="快速切換 Liquid Glass 主題配色">
+            <i class="fa-solid fa-palette"></i>
+            <span>切換配色</span>
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-header-mobile" title="開啟手機版 APK 下載與雙向同步中心">
+            <i class="fa-solid fa-mobile-screen-button"></i>
+            <span>手機同步</span>
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-header-update" title="檢查是否有新版本發布">
+            <i class="fa-solid fa-cloud-arrow-down"></i>
+            <span>檢查更新</span>
+          </button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-header-backup" title="一鍵建立全系統本機備份快照">
             <i class="fa-solid fa-box-archive"></i>
-            <span>建立本機備份</span>
+            <span>建立備份</span>
           </button>
           <button type="button" class="btn btn-success btn-sm" id="btn-top-add-stock" title="新增股票投資持股">
             <i class="fa-solid fa-arrow-trend-up"></i>
@@ -431,9 +452,450 @@
         </section>
 
         <!-- ================================================================
-             View 5: Settings (系統偏好與本機備份中心)
+             View 4.1: Wealth, Dividends, Goals & Calculators (股息、目標與試算工具)
+             ================================================================ -->
+        <section id="view-wealth" class="view-section">
+          <!-- KPI Row for Dividends & Goals -->
+          <div class="stats-grid" style="margin-bottom: 22px;">
+            <div class="stat-card stat-success">
+              <div class="stat-icon-wrapper">
+                <i class="fa-solid fa-hand-holding-dollar"></i>
+              </div>
+              <div class="stat-info-box">
+                <div class="stat-label">累計實領股息總額</div>
+                <div class="stat-value" id="div-kpi-total">NT$ 0</div>
+                <div class="stat-desc" id="div-kpi-count">共 0 筆領息紀錄</div>
+              </div>
+            </div>
+            <div class="stat-card stat-primary">
+              <div class="stat-icon-wrapper">
+                <i class="fa-solid fa-calendar-check"></i>
+              </div>
+              <div class="stat-info-box">
+                <div class="stat-label">今年度已領股息</div>
+                <div class="stat-value" id="div-kpi-year">NT$ 0</div>
+                <div class="stat-desc" id="div-kpi-monthly">平均每月被動收入: NT$ 0</div>
+              </div>
+            </div>
+            <div class="stat-card stat-info">
+              <div class="stat-icon-wrapper">
+                <i class="fa-solid fa-bullseye"></i>
+              </div>
+              <div class="stat-info-box">
+                <div class="stat-label">財富目標達成率</div>
+                <div class="stat-value" id="goal-kpi-avg-rate">0%</div>
+                <div class="stat-desc" id="goal-kpi-summary">已設定 0 項里程碑目標</div>
+              </div>
+            </div>
+            <div class="stat-card stat-warning">
+              <div class="stat-icon-wrapper">
+                <i class="fa-solid fa-bell"></i>
+              </div>
+              <div class="stat-info-box">
+                <div class="stat-label">智慧提醒與預警</div>
+                <div class="stat-value" id="wealth-kpi-alerts">0 則</div>
+                <div class="stat-desc">保固到期 · 外借 · 停利停損</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section A: 財富目標與里程碑 (Financial Goals) -->
+          <div class="card" style="margin-bottom: 22px;">
+            <div class="card-header" style="flex-wrap: wrap; gap: 12px;">
+              <div class="card-title">
+                <i class="fa-solid fa-flag-checkered" style="color: #38bdf8;"></i>
+                <span>財富目標與資產里程碑 (Financial Milestones)</span>
+              </div>
+              <button type="button" class="btn btn-primary btn-sm" id="btn-add-goal">
+                <i class="fa-solid fa-plus"></i> 新增財富目標
+              </button>
+            </div>
+            <div id="goals-grid-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px;">
+              <!-- Goals rendered via JS -->
+            </div>
+          </div>
+
+          <!-- Section B: 股息與被動收入明細 (Dividend Tracker) -->
+          <div class="card" style="margin-bottom: 22px;">
+            <div class="card-header" style="flex-wrap: wrap; gap: 12px;">
+              <div class="card-title">
+                <i class="fa-solid fa-coins" style="color: #fbbf24;"></i>
+                <span>股息與被動收入紀錄 (Dividend & Cashflow Log)</span>
+              </div>
+              <button type="button" class="btn btn-success btn-sm" id="btn-add-dividend">
+                <i class="fa-solid fa-plus"></i> 登記領取股息
+              </button>
+            </div>
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>除息/發放日</th>
+                    <th>代號</th>
+                    <th>標的名稱</th>
+                    <th>股利類型</th>
+                    <th style="text-align: right;">原幣金額</th>
+                    <th style="text-align: right;">折合台幣實領 (TWD)</th>
+                    <th>備註</th>
+                    <th style="text-align: center;">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="dividends-tbody">
+                  <!-- Dividends rendered via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Section C: 智慧理財與資產再平衡工具箱 (Calculators) -->
+          <div class="dashboard-grid" style="margin-bottom: 22px;">
+            <!-- Calculator 1: 複利與定期定額試算機 -->
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">
+                  <i class="fa-solid fa-calculator" style="color: var(--primary-light);"></i>
+                  <span>定期定額與複利成長試算機 (Compound Interest)</span>
+                </div>
+              </div>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label class="form-label">起始本金 (NT$)</label>
+                  <input type="number" class="form-control" id="calc-init-principal" value="100000" min="0" step="10000">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">每月定期投入 (NT$)</label>
+                  <input type="number" class="form-control" id="calc-monthly-add" value="15000" min="0" step="1000">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">預估年化報酬率 (%)</label>
+                  <input type="number" class="form-control" id="calc-annual-rate" value="8.0" min="0.1" max="50" step="0.5">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">投資持續年數 (年)</label>
+                  <input type="number" class="form-control" id="calc-years" value="10" min="1" max="60" step="1">
+                </div>
+              </div>
+              <div style="background: rgba(15, 23, 42, 0.55); border: var(--glass-border); border-radius: var(--radius-md); padding: 14px 16px; margin-top: 8px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
+                  <span style="color: var(--text-muted);">累積投入總本金：</span>
+                  <strong id="calc-res-principal" style="color: #e2e8f0;">NT$ 0</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
+                  <span style="color: var(--text-muted);">複利產生總收益：</span>
+                  <strong id="calc-res-interest" style="color: #4ade80;">+NT$ 0</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 15px;">
+                  <span style="font-weight: 700; color: var(--primary-light);">期滿預估總資產：</span>
+                  <strong id="calc-res-total" style="color: #ffffff; font-size: 17px;">NT$ 0</strong>
+                </div>
+              </div>
+            </div>
+
+            <!-- Calculator 2: 資產配置再平衡與智慧提醒 -->
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">
+                  <i class="fa-solid fa-scale-balanced" style="color: #34d399;"></i>
+                  <span>資產配置再平衡試算 & 智慧預警中心</span>
+                </div>
+              </div>
+              <div style="margin-bottom: 14px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                  <label class="form-label" style="margin: 0;">目標【證券股票】佔總淨值比例</label>
+                  <strong id="rebal-target-label" style="color: var(--primary-light);">70% 股票 / 30% 實體資產</strong>
+                </div>
+                <input type="range" id="rebal-target-slider" min="0" max="100" step="5" value="70" style="width: 100%; accent-color: var(--primary); cursor: pointer;">
+                <div id="rebal-advice-box" style="margin-top: 10px; padding: 12px 14px; border-radius: var(--radius-sm); background: rgba(15, 23, 42, 0.5); border: var(--glass-border); font-size: 12.5px; color: var(--text-muted);">
+                  計算中...
+                </div>
+              </div>
+
+              <div style="border-top: 1px solid rgba(255,255,255,0.08); padding-top: 12px;">
+                <div style="font-size: 13px; font-weight: 600; color: #fbbf24; margin-bottom: 8px;">
+                  <i class="fa-solid fa-bell"></i> 即時智慧提醒清單
+                </div>
+                <div id="smart-alerts-container" class="alert-banner-list" style="max-height: 170px; overflow-y: auto;">
+                  <!-- Alerts rendered via JS -->
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================================================================
+             View 4.2: Mobile APK & PC-Mobile Bidirectional Sync (手機 APK 與雙向同步)
+             ================================================================ -->
+        <section id="view-mobile" class="view-section">
+          <div class="dashboard-grid" style="max-width: 1080px; margin: 0 auto;">
+            <!-- Left Card: 電腦端同步伺服器 & 手機版 APK 下載與掃碼配對 -->
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">
+                  <i class="fa-solid fa-qrcode" style="color: #38bdf8;"></i>
+                  <span>手機版 APK 下載 & 區域網路掃碼連線</span>
+                </div>
+                <span class="badge badge-inuse" id="mobile-server-badge">同步服務運行中</span>
+              </div>
+
+              <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.6;">
+                本系統內建 <strong>區域網路雙向同步引擎 (LAN Sync Server)</strong>。您可在手機安裝專屬 Android APK，或直接用手機掃描下方 QR Code 開啟行動版，在手機上隨時新增、修改、刪除資產與股票並與電腦雙向同步！
+              </p>
+
+              <!-- QR Code & Connection Info -->
+              <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap; background: rgba(15, 23, 42, 0.55); padding: 18px; border-radius: var(--radius-md); border: var(--glass-border); margin-bottom: 18px;">
+                <div class="qr-container-box" id="mobile-qr-box" title="使用手機相機掃描即可連線">
+                  <!-- Offline SVG QR Code rendered via JS -->
+                </div>
+                <div style="flex: 1; min-width: 210px;">
+                  <div style="font-size: 12px; color: var(--text-dim); margin-bottom: 4px;">💻 電腦端連線網址 (與手機同 Wi-Fi)：</div>
+                  <div style="font-family: monospace; font-size: 16px; font-weight: 700; color: #38bdf8; margin-bottom: 10px; word-break: break-all;" id="mobile-sync-url-display">
+                    http://192.168.1.100:18888
+                  </div>
+
+                  <div style="display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 10px;">
+                    <div>
+                      <span style="font-size: 11px; color: var(--text-dim);">安全配對 PIN 碼：</span>
+                      <strong style="font-family: monospace; font-size: 15px; color: #fbbf24; margin-left: 4px;" id="mobile-sync-pin-display">8888</strong>
+                    </div>
+                    <div>
+                      <span style="font-size: 11px; color: var(--text-dim);">其他可用 IP：</span>
+                      <span style="font-family: monospace; font-size: 12px; color: var(--text-muted);" id="mobile-sync-all-ips">-</span>
+                    </div>
+                  </div>
+
+                  <div style="font-size: 11.5px; color: #4ade80;" id="mobile-last-sync-display">
+                    <i class="fa-solid fa-circle-check"></i> 雙向同步伺服器已就緒，支援手機即時更改資料
+                  </div>
+                </div>
+              </div>
+
+              <!-- Download APK Buttons -->
+              <div style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.14) 0%, rgba(6, 182, 212, 0.14) 100%); padding: 16px; border-radius: var(--radius-md); border: 1px solid rgba(99, 102, 241, 0.3);">
+                <div style="font-weight: 700; color: #fff; font-size: 14px; margin-bottom: 6px;">
+                  <i class="fa-brands fa-android" style="color: #4ade80; font-size: 16px;"></i> 下載 Android 手機版應用程式 (APK)
+                </div>
+                <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+                  手機版 APK 支援離線獨立運作與儲存，並可隨時輸入上方電腦 IP 將手機上的修改雙向同步回電腦資料庫。
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                  <button type="button" class="btn btn-primary btn-sm" id="btn-download-apk">
+                    <i class="fa-brands fa-android"></i> 下載最新 Android APK (v2.0.0)
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-sync-url">
+                    <i class="fa-solid fa-copy"></i> 複製連線網址
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-sm" id="btn-refresh-sync-status">
+                    <i class="fa-solid fa-arrows-rotate"></i> 重新偵測網路
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Card: 手機端 ↔ 電腦端雙向同步控制器 (Works on Mobile APK & Remote Browser) -->
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">
+                  <i class="fa-solid fa-arrows-left-right-to-line" style="color: #a855f7;"></i>
+                  <span>手機 ↔ 電腦雙向同步控制台 (Mobile Sync Client)</span>
+                </div>
+              </div>
+
+              <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px; line-height: 1.6;">
+                當您在 <strong>手機版 APK</strong> 操作時，可在此輸入電腦端顯示的 IP 位址與 PIN 碼。您可以先在手機離線新增或修改資產、股票、股息，回到家連上 Wi-Fi 後一鍵雙向合併同步！
+              </p>
+
+              <div class="form-grid" style="margin-bottom: 14px;">
+                <div class="form-group">
+                  <label class="form-label">電腦端伺服器位址 (IP:Port)</label>
+                  <input type="text" class="form-control" id="mobile-client-host" placeholder="例如: 192.168.1.100:18888">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">電腦配對 PIN 碼</label>
+                  <input type="text" class="form-control" id="mobile-client-pin" value="8888" placeholder="預設: 8888">
+                </div>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 16px;">
+                <label class="form-label">裝置識別名稱</label>
+                <input type="text" class="form-control" id="mobile-device-name" value="我的 Android 手機" placeholder="例如: Hankyle 的手機">
+              </div>
+
+              <div id="mobile-client-conn-status" style="padding: 12px 14px; border-radius: var(--radius-sm); background: rgba(15, 23, 42, 0.5); border: var(--glass-border); font-size: 12.5px; color: var(--text-muted); margin-bottom: 16px;">
+                <i class="fa-solid fa-circle-info"></i> 請輸入電腦端 IP 位址後點擊下方按鈕進行連線與同步。
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 10px;">
+                <button type="button" class="btn btn-primary" id="btn-mobile-sync-merge" style="justify-content: center; padding: 12px;">
+                  <i class="fa-solid fa-rotate"></i> 立即執行【雙向智慧合併同步】(手機 ⇄ 電腦)
+                </button>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                  <button type="button" class="btn btn-secondary" id="btn-mobile-sync-push" style="justify-content: center;">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> 推送手機修改至電腦
+                  </button>
+                  <button type="button" class="btn btn-secondary" id="btn-mobile-sync-pull" style="justify-content: center;">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> 從電腦拉取最新資料
+                  </button>
+                </div>
+              </div>
+
+              <div style="border-top: 1px solid rgba(255,255,255,0.08); margin-top: 18px; padding-top: 14px;">
+                <div style="font-size: 13px; font-weight: 600; color: #a5b4fc; margin-bottom: 8px;">
+                  <i class="fa-solid fa-shield-cat"></i> 電腦端配對 PIN 碼設定
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                  <input type="text" class="form-control" id="setting-mobile-pin" value="8888" placeholder="設定 4~8 位數配對碼" style="max-width: 180px;">
+                  <button type="button" class="btn btn-secondary btn-sm" id="btn-save-mobile-pin">
+                    <i class="fa-solid fa-check"></i> 更新電腦 PIN 碼
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================================================================
+             View 5: Settings (主題配色、自動更新與本機備份中心)
              ================================================================ -->
         <section id="view-settings" class="view-section">
+          <!-- Card 0: 🎨 主題配色與毛玻璃視覺工作坊 (Theme & Color Palette Studio) -->
+          <div class="card" style="max-width: 860px; margin: 0 auto 24px auto;">
+            <div class="card-header">
+              <div class="card-title">
+                <i class="fa-solid fa-palette" style="color: var(--primary-light);"></i>
+                <span>Liquid Glass 主題配色與視覺風格工作坊 (Theme Studio)</span>
+              </div>
+            </div>
+
+            <div style="margin-bottom: 18px;">
+              <label class="form-label">選擇預設主題風格 (點擊立即套用)</label>
+              <div class="theme-swatch-grid" id="theme-swatch-container">
+                <div class="theme-swatch-card active" data-theme-id="ocean">
+                  <div class="theme-swatch-orb" style="background: linear-gradient(135deg, #6366f1, #06b6d4);"></div>
+                  <div>
+                    <div style="font-weight: 700; font-size: 13px;">深海極光藍</div>
+                    <div style="font-size: 11px; color: var(--text-dim);">Ocean Aurora</div>
+                  </div>
+                </div>
+                <div class="theme-swatch-card" data-theme-id="emerald">
+                  <div class="theme-swatch-orb" style="background: linear-gradient(135deg, #10b981, #14b8a6);"></div>
+                  <div>
+                    <div style="font-weight: 700; font-size: 13px;">翡翠流光綠</div>
+                    <div style="font-size: 11px; color: var(--text-dim);">Emerald Wealth</div>
+                  </div>
+                </div>
+                <div class="theme-swatch-card" data-theme-id="amethyst">
+                  <div class="theme-swatch-orb" style="background: linear-gradient(135deg, #a855f7, #ec4899);"></div>
+                  <div>
+                    <div style="font-weight: 700; font-size: 13px;">紫晶星雲</div>
+                    <div style="font-size: 11px; color: var(--text-dim);">Amethyst Nebula</div>
+                  </div>
+                </div>
+                <div class="theme-swatch-card" data-theme-id="amber">
+                  <div class="theme-swatch-orb" style="background: linear-gradient(135deg, #f59e0b, #f97316);"></div>
+                  <div>
+                    <div style="font-weight: 700; font-size: 13px;">琥珀鎏金</div>
+                    <div style="font-size: 11px; color: var(--text-dim);">Amber Gold</div>
+                  </div>
+                </div>
+                <div class="theme-swatch-card" data-theme-id="crimson">
+                  <div class="theme-swatch-orb" style="background: linear-gradient(135deg, #f43f5e, #8b5cf6);"></div>
+                  <div>
+                    <div style="font-weight: 700; font-size: 13px;">赤焰緋紅</div>
+                    <div style="font-size: 11px; color: var(--text-dim);">Crimson Ruby</div>
+                  </div>
+                </div>
+                <div class="theme-swatch-card" data-theme-id="glacier">
+                  <div class="theme-swatch-orb" style="background: linear-gradient(135deg, #eef2f9, #6366f1);"></div>
+                  <div>
+                    <div style="font-weight: 700; font-size: 13px;">極簡冰川白</div>
+                    <div style="font-size: 11px; color: var(--text-dim);">Glacier Light</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-grid" style="align-items: end;">
+              <div class="form-group">
+                <label class="form-label">自訂主色調 (Primary Accent)</label>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                  <input type="color" id="setting-custom-primary" value="#6366f1" style="width: 48px; height: 38px; border: none; border-radius: 8px; background: transparent; cursor: pointer;">
+                  <input type="text" class="form-control" id="setting-custom-primary-hex" value="#6366f1" style="font-family: monospace;">
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">自訂次色調 (Secondary Glow)</label>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                  <input type="color" id="setting-custom-accent" value="#06b6d4" style="width: 48px; height: 38px; border: none; border-radius: 8px; background: transparent; cursor: pointer;">
+                  <input type="text" class="form-control" id="setting-custom-accent-hex" value="#06b6d4" style="font-family: monospace;">
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Liquid Glass 毛玻璃模糊強度</label>
+                <select class="form-control" id="setting-blur-level">
+                  <option value="low">輕量透明 (Low Blur - 效能優先)</option>
+                  <option value="medium">標準磨砂 (Medium Blur)</option>
+                  <option value="high" selected>高質感液態玻璃 (High Blur - 推薦)</option>
+                  <option value="ultra">極致深邃毛玻璃 (Ultra Frosted)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <button type="button" class="btn btn-secondary" id="btn-apply-custom-colors" style="width: 100%; justify-content: center;">
+                  <i class="fa-solid fa-wand-magic-sparkles"></i> 套用自訂漸層色票
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 0.5: 🚀 軟體版本與自動更新中心 (Auto-Update Center) -->
+          <div class="card" style="max-width: 860px; margin: 0 auto 24px auto;">
+            <div class="card-header" style="flex-wrap: wrap; gap: 12px;">
+              <div class="card-title">
+                <i class="fa-solid fa-rocket" style="color: #38bdf8;"></i>
+                <span>軟體版本檢測與自動更新中心 (Auto-Updater)</span>
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <span class="badge badge-inuse" id="current-app-version-badge">目前版本: v2.0.0</span>
+                <button type="button" class="btn btn-primary btn-sm" id="btn-check-update-now">
+                  <i class="fa-solid fa-rotate"></i> 立即檢查新版本
+                </button>
+              </div>
+            </div>
+
+            <div id="update-status-box" style="background: rgba(15, 23, 42, 0.5); padding: 16px 18px; border-radius: var(--radius-md); border: var(--glass-border); margin-bottom: 14px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <div>
+                  <div style="font-weight: 700; font-size: 14px; color: var(--text-main);" id="update-status-title">
+                    目前運行的版本為 v2.0.0 正式版
+                  </div>
+                  <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;" id="update-status-desc">
+                    點擊右上角「立即檢查新版本」可自動連線 GitHub Release 檢查是否有最新安裝包與更新日誌。
+                  </div>
+                </div>
+                <div id="update-action-btns" style="display: none; gap: 8px; flex-wrap: wrap;">
+                  <button type="button" class="btn btn-success btn-sm" id="btn-install-update-now">
+                    <i class="fa-solid fa-download"></i> 一鍵下載並安裝更新
+                  </button>
+                </div>
+              </div>
+              <div id="update-release-notes" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 12.5px; color: var(--text-muted); white-space: pre-wrap; max-height: 200px; overflow-y: auto;"></div>
+            </div>
+
+            <div style="background: rgba(15, 23, 42, 0.45); padding: 14px 18px; border-radius: var(--radius-md); border: var(--glass-border);">
+              <label class="custom-checkbox-wrapper">
+                <input type="checkbox" id="setting-auto-check-update" class="custom-checkbox-input" checked>
+                <span class="custom-checkbox-box">
+                  <i class="fa-solid fa-check custom-checkbox-icon"></i>
+                </span>
+                <span class="custom-checkbox-label">
+                  <strong style="color: var(--text-main); font-size: 13.5px;">啟動程式時自動於背景檢查新版本更新</strong>
+                  <span style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                    當 GitHub 發布新版 Release 時，自動於右上角提示並支援一鍵下載升級。
+                  </span>
+                </span>
+              </label>
+            </div>
+          </div>
+
           <!-- Card 1: 系統參數與自動備份偏好 -->
           <div class="card" style="max-width: 860px; margin: 0 auto 24px auto;">
             <div class="card-header">
@@ -487,7 +949,7 @@
 
               <div style="display: flex; gap: 12px; justify-content: flex-end;">
                 <button type="submit" class="btn btn-primary">
-                  <i class="fa-solid fa-floppy-disk"></i> 儲存偏好設定
+                  <i class="fa-solid fa-floppy-disk"></i> 儲存所有偏好與配色設定
                 </button>
               </div>
             </form>
@@ -521,7 +983,7 @@
                   <i class="fa-solid fa-hard-drive"></i> 本機私有儲存路徑
                 </span>
                 <span style="font-size: 11px; color: #4ade80;">
-                  <i class="fa-solid fa-lock"></i> 100% 離線隱私 · 無需聯網上傳
+                  <i class="fa-solid fa-lock"></i> 100% 離線隱私 · 支援區域網路手機同步
                 </span>
               </div>
               <div style="font-family: monospace; font-size: 12px; color: #f1f5f9; word-break: break-all;" id="local-data-path">
@@ -558,7 +1020,7 @@
               </div>
             </div>
             <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
-              若您想將本機系統完全重設為全新狀態（清空所有實體資產、股票持股與異動日誌，不留任何預設範例資料），可點擊下方按鈕：
+              若您想將本機系統完全重設為全新狀態（清空所有實體資產、股票持股、股息、目標與異動日誌，不留任何預設範例資料），可點擊下方按鈕：
             </div>
             <div style="display: flex; justify-content: flex-end;">
               <button type="button" class="btn btn-danger" id="btn-clear-all-data">
@@ -955,6 +1417,174 @@
       </div>
     </div>
   </div>
+
+  <!-- ================================================================
+       Modal: Add / Edit Dividend (登記股息與被動收入)
+       ================================================================ -->
+  <div class="modal-backdrop" id="modal-dividend">
+    <div class="modal-box" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-dividend-title">登記領取股息 / 被動收入</h3>
+        <button type="button" class="btn btn-secondary btn-icon btn-close-modal">✕</button>
+      </div>
+      <form id="dividend-form">
+        <input type="hidden" id="div-field-id">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">股票代號 *</label>
+              <input type="text" class="form-control" id="div-field-symbol" placeholder="例如: 2330, 0050, NVDA" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">標的名稱 *</label>
+              <input type="text" class="form-control" id="div-field-name" placeholder="例如: 台積電, 元大台灣50" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">除息 / 發放日期 *</label>
+              <input type="date" class="form-control" id="div-field-date" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">股利類型</label>
+              <select class="form-control" id="div-field-type">
+                <option value="現金股利">現金股利 (Cash Dividend)</option>
+                <option value="配息再投入">配息再投入 (DRIP)</option>
+                <option value="股票股利">股票股利折現</option>
+                <option value="債券/定存利息">債券 / 定存利息</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">原幣領息金額 *</label>
+              <input type="number" step="any" min="0" class="form-control" id="div-field-orig-amount" placeholder="例如: 12500" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">幣別</label>
+              <select class="form-control" id="div-field-currency">
+                <option value="TWD">新台幣 (TWD)</option>
+                <option value="USD">美元 (USD - 自動x32換算)</option>
+              </select>
+            </div>
+            <div class="form-full form-group">
+              <label class="form-label">折合新台幣實領金額 (NT$) *</label>
+              <input type="number" step="any" min="0" class="form-control" id="div-field-twd-amount" placeholder="自動計算或手動調整" required>
+            </div>
+            <div class="form-full form-group">
+              <label class="form-label">備註說明</label>
+              <input type="text" class="form-control" id="div-field-notes" placeholder="例如: 2026 Q3 季配息、已扣除匯費 10 元...">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-close-modal">取消</button>
+          <button type="submit" class="btn btn-success">
+            <i class="fa-solid fa-check"></i> 儲存股息紀錄
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       Modal: Add / Edit Financial Goal (新增 / 編輯財富目標)
+       ================================================================ -->
+  <div class="modal-backdrop" id="modal-goal">
+    <div class="modal-box" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-goal-title">設定財富目標與里程碑</h3>
+        <button type="button" class="btn btn-secondary btn-icon btn-close-modal">✕</button>
+      </div>
+      <form id="goal-form">
+        <input type="hidden" id="goal-field-id">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-full form-group">
+              <label class="form-label">目標名稱 *</label>
+              <input type="text" class="form-control" id="goal-field-title" placeholder="例如: 人生第一桶金 100 萬、被動年領息 12 萬" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">連動追蹤類型</label>
+              <select class="form-control" id="goal-field-category">
+                <option value="總淨值目標">自動連動：綜合總淨資產估值</option>
+                <option value="證券市值目標">自動連動：股票證券總市值</option>
+                <option value="年領股息目標">自動連動：累計實領股息總額</option>
+                <option value="自訂儲蓄目標">手動輸入：獨立儲蓄/準備金</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">目標金額 (NT$) *</label>
+              <input type="number" step="1" min="1" class="form-control" id="goal-field-target" placeholder="例如: 1000000" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">目前累積金額 (手動類型適用)</label>
+              <input type="number" step="1" min="0" class="form-control" id="goal-field-current" value="0" placeholder="自動連動類型將自動讀取">
+            </div>
+            <div class="form-group">
+              <label class="form-label">預計達成期限</label>
+              <input type="date" class="form-control" id="goal-field-deadline">
+            </div>
+            <div class="form-full form-group">
+              <label class="form-label">激勵筆記 / 規劃</label>
+              <input type="text" class="form-control" id="goal-field-notes" placeholder="例如: 每月定期定額 0050 + NVDA">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-close-modal">取消</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="fa-solid fa-flag-checkered"></i> 儲存財富目標
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       Modal: Asset QR Tag Label Preview & Print (實體資產標籤卡列印)
+       ================================================================ -->
+  <div class="modal-backdrop" id="modal-asset-tag">
+    <div class="modal-box" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 class="modal-title">實體資產盤點標籤卡</h3>
+        <button type="button" class="btn btn-secondary btn-icon btn-close-modal">✕</button>
+      </div>
+      <div class="modal-body" id="asset-tag-print-area" style="text-align: center;">
+        <!-- Rendered dynamically -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-close-modal">關閉</button>
+        <button type="button" class="btn btn-primary" id="btn-print-asset-tag">
+          <i class="fa-solid fa-print"></i> 列印標籤卡
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile Bottom Navigation Bar (手機版 APK / 小螢幕專屬導覽列) -->
+  <nav class="mobile-bottom-nav" id="mobile-bottom-nav">
+    <button type="button" class="mobile-nav-btn active" data-view="view-dashboard">
+      <i class="fa-solid fa-chart-pie"></i>
+      <span>總覽</span>
+    </button>
+    <button type="button" class="mobile-nav-btn" data-view="view-stocks">
+      <i class="fa-solid fa-arrow-trend-up"></i>
+      <span>股票</span>
+    </button>
+    <button type="button" class="mobile-nav-btn" data-view="view-assets">
+      <i class="fa-solid fa-boxes-packing"></i>
+      <span>資產</span>
+    </button>
+    <button type="button" class="mobile-nav-btn" data-view="view-wealth">
+      <i class="fa-solid fa-sack-dollar"></i>
+      <span>股息/目標</span>
+    </button>
+    <button type="button" class="mobile-nav-btn" data-view="view-mobile">
+      <i class="fa-solid fa-mobile-screen-button"></i>
+      <span>同步</span>
+    </button>
+    <button type="button" class="mobile-nav-btn" data-view="view-settings">
+      <i class="fa-solid fa-palette"></i>
+      <span>設定</span>
+    </button>
+  </nav>
 
   <!-- Toast Notification Container -->
   <div class="toast-container" id="toast-container"></div>

@@ -1,8 +1,8 @@
 {
   "name": "asset-tracking-program",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "資產追蹤系統 (Asset Tracking Program) - Tauri + Rust 本地隱私資料庫與完整安全備份系統",
+  "description": "資產與證券追蹤系統 v2.0 (Asset Tracking Program) - 支援電腦手機雙向同步、自動更新、主題配色與財富管理",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",

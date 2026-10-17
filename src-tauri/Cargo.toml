@@ -1,9 +1,9 @@
 [package]
 name = "asset-tracking-program"
-version = "0.1.0"
+version = "2.0.0"
 edition = "2021"
 authors = ["hankyleisplay"]
-description = "資產追蹤系統 (Asset Tracking Program) - Tauri + Rust 本地隱私儲存與安全備份系統"
+description = "資產追蹤系統 v2.0 (Asset Tracking Program) - 電腦與手機雙向同步、自動更新、主題配色與財富管理平台"
 
 [dependencies]
 tauri = { version = "2", features = [] }

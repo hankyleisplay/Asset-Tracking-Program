@@ -1,0 +1,63 @@
+name: Build Android APK & Attach to Release
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-android-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.5'
+
+      - name: Prepare UI Assets and App Icon for Android
+        run: |
+          mkdir -p android/app/src/main/assets
+          cp ui/index.html android/app/src/main/assets/
+          cp ui/styles.css android/app/src/main/assets/
+          cp ui/app.js android/app/src/main/assets/
+          cp ui/app-icon.svg android/app/src/main/assets/
+          for dir in mipmap-mdpi mipmap-hdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
+            mkdir -p "android/app/src/main/res/$dir"
+            cp src-tauri/icons/icon.png "android/app/src/main/res/$dir/ic_launcher.png"
+          done
+
+      - name: Build Signed Release APK
+        working-directory: android
+        run: gradle assembleRelease --no-daemon
+
+      - name: Rename APK
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk Asset-Tracking-Mobile_v2.0.0.apk
+          ls -lh Asset-Tracking-Mobile_v2.0.0.apk
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Asset-Tracking-Mobile_v2.0.0.apk
+          path: Asset-Tracking-Mobile_v2.0.0.apk
+
+      - name: Attach APK to GitHub Release v2.0.0
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view v2.0.0 >/dev/null 2>&1; then
+            gh release upload v2.0.0 Asset-Tracking-Mobile_v2.0.0.apk --clobber
+          fi

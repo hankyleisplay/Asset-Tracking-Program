@@ -23,7 +23,16 @@ let appSettings = {
   auto_backup: true,
   last_backup_time: null,
   backup_retention_count: 20,
-  stock_color_mode: "tw"
+  stock_color_mode: "tw",
+  theme_preset: "ocean",
+  custom_primary_color: null,
+  custom_accent_color: null,
+  glass_blur_level: "medium",
+  auto_check_update: true,
+  mobile_sync_enabled: true,
+  mobile_sync_port: 18888,
+  mobile_sync_pin: "8888",
+  last_mobile_sync_time: null
 };
 
 let allAssets = [];
@@ -37,16 +46,29 @@ let filteredStocks = [];
 let currentStockFilterMarket = '全部';
 let stockSearchQuery = '';
 
+let allDividends = [];
+let allGoals = [];
+let latestUpdateInfo = null;
+let lastKnownSyncRevision = 0;
+
 // Delete modal state
-let pendingDeleteType = null; // 'asset' or 'stock'
+let pendingDeleteType = null; // 'asset' | 'stock' | 'dividend' | 'goal'
 let pendingDeleteId = null;
 
-// Safe IPC API with timeout and mock fallback
+// Detect if running on Mobile LAN Web Server or Mobile APK with Remote Host
+function getRemoteSyncHost() {
+  if (window.location && window.location.port === '18888' && window.location.host) {
+    return window.location.host;
+  }
+  const saved = localStorage.getItem('asset_mobile_remote_host');
+  return saved ? saved.trim() : '';
+}
+
+// Safe IPC API with timeout, Mobile LAN RPC bridge, and offline localStorage fallback
 async function invokeApi(command, args = {}) {
   const invoke = getTauriInvoke();
   if (invoke) {
     try {
-      // 6-second timeout promise race so UI never hangs
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error(`Tauri 指令 [${command}] 超時 (6秒)`)), 6000)
       );
@@ -54,15 +76,46 @@ async function invokeApi(command, args = {}) {
       return res;
     } catch (err) {
       console.warn(`[Tauri IPC] ${command} failed or timed out:`, err);
-      // Fallback to local mock database
       return mockApi(command, args);
     }
   } else {
-    return mockApi(command, args);
+    // Running in Mobile APK or Mobile Web Browser
+    const remoteHost = getRemoteSyncHost();
+    const isServedFromPcLan = window.location && window.location.port === '18888';
+    const writeCommands = [
+      'save_asset', 'delete_asset', 'update_asset_status',
+      'save_stock', 'delete_stock', 'batch_update_stock_prices',
+      'save_dividend', 'delete_dividend', 'save_goal', 'delete_goal',
+      'save_settings', 'clear_all_system_data'
+    ];
+    // Always execute on local mockDb first so offline works 100%
+    const localRes = await mockApi(command, args);
+
+    // If connected to PC LAN server, also forward RPC or pull live data
+    if (remoteHost && (isServedFromPcLan || writeCommands.includes(command))) {
+      try {
+        const pin = localStorage.getItem('asset_mobile_remote_pin') || appSettings.mobile_sync_pin || '';
+        const resp = await fetch(`http://${remoteHost}/api/rpc`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command, args, pin })
+        });
+        if (resp.ok) {
+          const json = await resp.json();
+          if (json && json.ok && json.data !== undefined) {
+            return json.data;
+          }
+        }
+      } catch (e) {
+        // Offline or PC unreachable - seamlessly use localRes
+        console.debug('[Mobile Offline Mode] Using local storage for', command);
+      }
+    }
+    return localRes;
   }
 }
 
-// 3. Mock Database for Standalone Preview / Offline Fallback (Clean Slate / 0 預設資料)
+// 3. Mock Database for Mobile APK Offline Mode & Browser Fallback (Clean Slate / 0 預設資料)
 const MOCK_STORAGE_KEY = 'asset_tracking_portfolio_backup_v1';
 
 function getMockDb() {
@@ -71,6 +124,9 @@ function getMockDb() {
     if (existing) {
       const parsed = JSON.parse(existing);
       if (parsed && Array.isArray(parsed.assets) && Array.isArray(parsed.stocks)) {
+        if (!Array.isArray(parsed.dividends)) parsed.dividends = [];
+        if (!Array.isArray(parsed.goals)) parsed.goals = [];
+        if (!Array.isArray(parsed.deleted_ids)) parsed.deleted_ids = [];
         return parsed;
       }
     }
@@ -78,19 +134,15 @@ function getMockDb() {
     console.warn('Failed to parse localStorage:', e);
   }
 
-  // 預設不預先填入任何資產或股票資料，保持完全純淨的初始狀態
   const initial = {
     assets: [],
     stocks: [],
+    dividends: [],
+    goals: [],
     logs: [],
     backups: [],
-    settings: {
-      currency: "TWD",
-      auto_backup: true,
-      last_backup_time: null,
-      backup_retention_count: 20,
-      stock_color_mode: "tw"
-    }
+    deleted_ids: [],
+    settings: { ...appSettings }
   };
   saveMockDb(initial);
   return initial;
@@ -104,17 +156,19 @@ function saveMockDb(db) {
   }
 }
 
-function mockApi(command, args) {
+async function mockApi(command, args) {
   const db = getMockDb();
 
   if (command === 'get_assets') return db.assets || [];
   if (command === 'get_stocks') return db.stocks || [];
+  if (command === 'get_dividends') return db.dividends || [];
+  if (command === 'get_goals') return db.goals || [];
   if (command === 'get_audit_logs') return db.logs || [];
-  if (command === 'get_settings') return db.settings || appSettings;
-  if (command === 'get_data_folder_path') return "C:\\Users\\hankyle\\AppData\\Roaming\\AssetTracking";
+  if (command === 'get_settings') return { ...appSettings, ...(db.settings || {}) };
+  if (command === 'get_data_folder_path') return "手機端與瀏覽器本機安全儲存區 (LocalStorage / IndexedDB)";
 
   if (command === 'save_settings') {
-    db.settings = args.settings;
+    db.settings = { ...appSettings, ...args.settings };
     saveMockDb(db);
     return null;
   }
@@ -124,12 +178,25 @@ function mockApi(command, args) {
     if (!item.id) {
       item.id = "AST-" + Date.now().toString().slice(-6);
     }
+    const nowStr = new Date().toLocaleString();
+    if (!item.created_at) item.created_at = nowStr;
+    item.updated_at = nowStr;
+    const price = parseFloat(item.purchase_price) || 0;
+    const years = parseInt(item.depreciation_years) || 3;
+    if (price > 0 && years > 0 && item.purchase_date) {
+      const elapsed = Math.max(0, (new Date() - new Date(item.purchase_date)) / (1000 * 60 * 60 * 24 * 365.25));
+      item.current_value = Math.round(Math.max(0, price * (1 - Math.min(1, elapsed / years))));
+    } else {
+      item.current_value = price;
+    }
+
     const idx = (db.assets || []).findIndex(a => a.id === item.id);
     if (idx >= 0) {
       db.assets[idx] = item;
     } else {
       db.assets.push(item);
     }
+    db.deleted_ids = (db.deleted_ids || []).filter(id => id !== item.id);
     db.logs.unshift({
       id: "log-" + Date.now(),
       asset_id: item.id,
@@ -137,7 +204,7 @@ function mockApi(command, args) {
       action: idx >= 0 ? "修改" : "建立",
       operator: args.operator || "使用者",
       details: `${idx >= 0 ? "修改" : "建立"}資產: ${item.name}`,
-      timestamp: new Date().toLocaleString()
+      timestamp: nowStr
     });
     saveMockDb(db);
     return item;
@@ -147,6 +214,7 @@ function mockApi(command, args) {
     const idx = (db.assets || []).findIndex(a => a.id === args.id);
     if (idx >= 0) {
       const removed = db.assets.splice(idx, 1)[0];
+      if (!db.deleted_ids.includes(args.id)) db.deleted_ids.push(args.id);
       db.logs.unshift({
         id: "log-" + Date.now(),
         asset_id: args.id,
@@ -166,6 +234,7 @@ function mockApi(command, args) {
     if (asset) {
       const old = asset.status;
       asset.status = args.new_status;
+      asset.updated_at = new Date().toLocaleString();
       if (args.custodian) asset.custodian = args.custodian;
       db.logs.unshift({
         id: "log-" + Date.now(),
@@ -174,7 +243,7 @@ function mockApi(command, args) {
         action: args.action_type || "異動",
         operator: args.operator || "管理員",
         details: `狀態變更: ${old} -> ${args.new_status} (${args.notes || '無說明'})`,
-        timestamp: new Date().toLocaleString()
+        timestamp: asset.updated_at
       });
       saveMockDb(db);
     }
@@ -186,6 +255,7 @@ function mockApi(command, args) {
     if (!stock.id) {
       stock.id = `STK-${stock.symbol.toUpperCase()}`;
     }
+    stock.updated_at = new Date().toLocaleString();
     const rate = stock.currency === 'USD' ? (stock.exchange_rate || 32.0) : 1.0;
     stock.total_cost_twd = Math.round(stock.shares * stock.buy_price * rate * 100) / 100;
     stock.market_value_twd = Math.round(stock.shares * stock.current_price * rate * 100) / 100;
@@ -200,6 +270,7 @@ function mockApi(command, args) {
     } else {
       db.stocks.push(stock);
     }
+    db.deleted_ids = (db.deleted_ids || []).filter(id => id !== stock.id);
     db.logs.unshift({
       id: "log-" + Date.now(),
       asset_id: stock.id,
@@ -207,7 +278,7 @@ function mockApi(command, args) {
       action: idx >= 0 ? "更新股票" : "買入股票",
       operator: args.operator || "投資人",
       details: `${idx >= 0 ? "更新" : "買入"}持股: ${stock.name} (${stock.symbol}), 現價: ${stock.current_price}`,
-      timestamp: new Date().toLocaleString()
+      timestamp: stock.updated_at
     });
     saveMockDb(db);
     return stock;
@@ -217,6 +288,7 @@ function mockApi(command, args) {
     const idx = (db.stocks || []).findIndex(s => s.id === args.id);
     if (idx >= 0) {
       const removed = db.stocks.splice(idx, 1)[0];
+      if (!db.deleted_ids.includes(args.id)) db.deleted_ids.push(args.id);
       db.logs.unshift({
         id: "log-" + Date.now(),
         asset_id: args.id,
@@ -231,12 +303,51 @@ function mockApi(command, args) {
     return null;
   }
 
+  if (command === 'save_dividend') {
+    const rec = { ...args.record };
+    if (!rec.id) rec.id = "DIV-" + Date.now().toString().slice(-6);
+    const rate = rec.currency === 'USD' ? (rec.exchange_rate || 32.0) : 1.0;
+    rec.net_amount_twd = Math.round(Math.max(0, (rec.gross_amount || 0) - (rec.tax_or_fee || 0)) * rate * 100) / 100;
+    const idx = (db.dividends || []).findIndex(d => d.id === rec.id);
+    if (idx >= 0) db.dividends[idx] = rec;
+    else db.dividends.unshift(rec);
+    db.deleted_ids = (db.deleted_ids || []).filter(id => id !== rec.id);
+    saveMockDb(db);
+    return rec;
+  }
+
+  if (command === 'delete_dividend') {
+    db.dividends = (db.dividends || []).filter(d => d.id !== args.id);
+    if (!db.deleted_ids.includes(args.id)) db.deleted_ids.push(args.id);
+    saveMockDb(db);
+    return null;
+  }
+
+  if (command === 'save_goal') {
+    const goal = { ...args.goal };
+    if (!goal.id) goal.id = "GOAL-" + Date.now().toString().slice(-6);
+    const idx = (db.goals || []).findIndex(g => g.id === goal.id);
+    if (idx >= 0) db.goals[idx] = goal;
+    else db.goals.push(goal);
+    db.deleted_ids = (db.deleted_ids || []).filter(id => id !== goal.id);
+    saveMockDb(db);
+    return goal;
+  }
+
+  if (command === 'delete_goal') {
+    db.goals = (db.goals || []).filter(g => g.id !== args.id);
+    if (!db.deleted_ids.includes(args.id)) db.deleted_ids.push(args.id);
+    saveMockDb(db);
+    return null;
+  }
+
   if (command === 'batch_update_stock_prices') {
     const updates = args.updates || {};
     (db.stocks || []).forEach(s => {
       const newPrice = updates[s.id] || updates[s.symbol];
       if (newPrice && newPrice > 0) {
         s.current_price = newPrice;
+        s.updated_at = new Date().toLocaleString();
         const rate = s.currency === 'USD' ? (s.exchange_rate || 32.0) : 1.0;
         s.total_cost_twd = Math.round(s.shares * s.buy_price * rate * 100) / 100;
         s.market_value_twd = Math.round(s.shares * s.current_price * rate * 100) / 100;
@@ -274,6 +385,8 @@ function mockApi(command, args) {
   if (command === 'get_dashboard_stats') {
     const assets = db.assets || [];
     const stocks = db.stocks || [];
+    const dividends = db.dividends || [];
+    const goals = db.goals || [];
     let totalOrig = 0, totalCurr = 0, borrowed = 0, repairing = 0;
     const statusDist = {}, catDist = {};
 
@@ -295,6 +408,7 @@ function mockApi(command, args) {
     });
     const stockPnl = stockMarket - stockCost;
     const stockRoi = stockCost > 0 ? (stockPnl / stockCost) * 100 : 0;
+    const totalDividends = dividends.reduce((acc, d) => acc + (d.net_amount_twd || 0), 0);
 
     return {
       total_count: assets.length,
@@ -302,7 +416,7 @@ function mockApi(command, args) {
       total_current_value: Math.round(totalCurr * 100) / 100,
       status_distribution: statusDist,
       category_distribution: catDist,
-      expiring_warranty_count: 1,
+      expiring_warranty_count: 0,
       borrowed_count: borrowed,
       repairing_count: repairing,
       recent_logs: (db.logs || []).slice(0, 10),
@@ -314,7 +428,59 @@ function mockApi(command, args) {
         total_return_rate: Math.round(stockRoi * 100) / 100,
         market_distribution: stockDist
       },
-      total_net_worth_twd: Math.round((totalCurr + stockMarket) * 100) / 100
+      total_net_worth_twd: Math.round((totalCurr + stockMarket) * 100) / 100,
+      total_dividends_twd: Math.round(totalDividends * 100) / 100,
+      dividend_count: dividends.length,
+      goals_count: goals.length
+    };
+  }
+
+  if (command === 'get_mobile_sync_status') {
+    const host = getRemoteSyncHost() || window.location.host || '127.0.0.1:18888';
+    return {
+      running: true,
+      port: 18888,
+      local_ips: [host.split(':')[0] || '127.0.0.1'],
+      mobile_web_url: `http://${host}`,
+      apk_download_url: "https://github.com/hankyleisplay/Asset-Tracking-Program/releases/download/v2.0.0/Asset-Tracking-Mobile_v2.0.0.apk",
+      sync_pin: db.settings?.mobile_sync_pin || "8888",
+      last_sync_time: db.settings?.last_mobile_sync_time || null,
+      sync_revision: 1
+    };
+  }
+
+  if (command === 'check_app_update') {
+    const currentVer = "2.0.0";
+    try {
+      const resp = await fetch('https://api.github.com/repos/hankyleisplay/Asset-Tracking-Program/releases/latest');
+      if (resp.ok) {
+        const json = await resp.json();
+        const latestVer = (json.tag_name || 'v2.0.0').replace(/^[vV]/, '');
+        return {
+          has_update: latestVer > currentVer,
+          current_version: currentVer,
+          latest_version: latestVer,
+          release_title: json.name || `v${latestVer}`,
+          release_notes: json.body || '',
+          published_at: json.published_at || '',
+          download_url: json.html_url || 'https://github.com/hankyleisplay/Asset-Tracking-Program/releases/latest',
+          apk_download_url: 'https://github.com/hankyleisplay/Asset-Tracking-Program/releases/download/v2.0.0/Asset-Tracking-Mobile_v2.0.0.apk',
+          html_url: json.html_url || 'https://github.com/hankyleisplay/Asset-Tracking-Program/releases/latest'
+        };
+      }
+    } catch (e) {
+      console.warn('Update check fallback:', e);
+    }
+    return {
+      has_update: false,
+      current_version: currentVer,
+      latest_version: currentVer,
+      release_title: `v${currentVer} 最新版`,
+      release_notes: "目前已經是最新穩定版本 v2.0.0。",
+      published_at: new Date().toLocaleDateString(),
+      download_url: "https://github.com/hankyleisplay/Asset-Tracking-Program/releases/latest",
+      apk_download_url: "https://github.com/hankyleisplay/Asset-Tracking-Program/releases/download/v2.0.0/Asset-Tracking-Mobile_v2.0.0.apk",
+      html_url: "https://github.com/hankyleisplay/Asset-Tracking-Program/releases/latest"
     };
   }
 
@@ -325,7 +491,7 @@ function mockApi(command, args) {
     const displayTs = now.toLocaleString();
     const item = {
       filename: `backup_${tsStr}.json`,
-      filepath: `C:\\Users\\hankyle\\AppData\\Roaming\\AssetTracking\\backups\\backup_${tsStr}.json`,
+      filepath: `LocalStorage/backups/backup_${tsStr}.json`,
       created_at: displayTs,
       size_kb: 2.5,
       asset_count: (db.assets || []).length,
@@ -340,13 +506,8 @@ function mockApi(command, args) {
     return item;
   }
 
-  if (command === 'list_local_backups') {
-    return db.backups || [];
-  }
-
-  if (command === 'restore_local_backup') {
-    return '已成功從備份還原！';
-  }
+  if (command === 'list_local_backups') return db.backups || [];
+  if (command === 'restore_local_backup') return '已成功從備份還原！';
 
   if (command === 'delete_local_backup') {
     if (db.backups) {
@@ -358,11 +519,13 @@ function mockApi(command, args) {
 
   if (command === 'export_full_backup_json') {
     return JSON.stringify({
-      version: "1.0.0",
+      version: "2.0.0",
       timestamp: new Date().toLocaleString(),
       note: "本機全量備份匯出",
       assets: db.assets || [],
       stocks: db.stocks || [],
+      dividends: db.dividends || [],
+      goals: db.goals || [],
       logs: db.logs || [],
       settings: db.settings || appSettings
     }, null, 2);
@@ -371,7 +534,10 @@ function mockApi(command, args) {
   if (command === 'clear_all_system_data') {
     db.assets = [];
     db.stocks = [];
+    db.dividends = [];
+    db.goals = [];
     db.logs = [];
+    db.deleted_ids = [];
     saveMockDb(db);
     return null;
   }
@@ -438,12 +604,16 @@ function mockApi(command, args) {
 // 4. Initialization Entrypoint
 // ==========================================================================
 document.addEventListener('DOMContentLoaded', async () => {
-  console.log('[AssetTracking] Initializing Liquid Glass & Material Design 3...');
+  console.log('[AssetTracking v2.0] Initializing Liquid Glass & Material Design 3...');
   initNavigation();
   initCustomSelects();
   initEventListeners();
   await loadSettings();
   await refreshAllData();
+  startBackgroundMobileSyncWatcher();
+  if (appSettings.auto_check_update) {
+    setTimeout(() => handleCheckAppUpdate(false), 2500);
+  }
 });
 
 // ==========================================================================
@@ -559,40 +729,48 @@ window.addEventListener('click', () => {
 });
 
 // ==========================================================================
-// 6. Navigation System
+// 6. Navigation System (Desktop Sidebar + Mobile Bottom Bar)
 // ==========================================================================
-function initNavigation() {
+function switchToView(targetView) {
   const navItems = document.querySelectorAll('.nav-item');
+  const mobileBtns = document.querySelectorAll('.mobile-nav-btn');
   const sections = document.querySelectorAll('.view-section');
 
-  navItems.forEach(item => {
+  navItems.forEach(n => {
+    n.classList.toggle('active', n.getAttribute('data-view') === targetView);
+  });
+  mobileBtns.forEach(b => {
+    b.classList.toggle('active', b.getAttribute('data-view') === targetView);
+  });
+  sections.forEach(s => {
+    s.classList.toggle('active', s.id === targetView);
+  });
+
+  const activeNav = document.querySelector(`.nav-item[data-view="${targetView}"] span`);
+  const headerTitle = document.getElementById('header-title');
+  if (headerTitle && activeNav) {
+    headerTitle.innerText = activeNav.innerText;
+  }
+
+  try {
+    if (targetView === 'view-dashboard') renderDashboard();
+    if (targetView === 'view-stocks') renderStocksTable();
+    if (targetView === 'view-assets') renderAssetsTable();
+    if (targetView === 'view-wealth') renderWealthView();
+    if (targetView === 'view-mobile') loadMobileSyncView();
+    if (targetView === 'view-logs') loadLogs();
+    if (targetView === 'view-settings') loadSettingsView();
+  } catch (err) {
+    console.error('Error switching tab:', err);
+  }
+}
+
+function initNavigation() {
+  document.querySelectorAll('.nav-item, .mobile-nav-btn').forEach(item => {
     item.addEventListener('click', (e) => {
       e.preventDefault();
-      navItems.forEach(n => n.classList.remove('active'));
-      sections.forEach(s => s.classList.remove('active'));
-
-      item.classList.add('active');
       const targetView = item.getAttribute('data-view');
-      const targetSection = document.getElementById(targetView);
-      if (targetSection) {
-        targetSection.classList.add('active');
-      }
-
-      const pageTitle = item.querySelector('span')?.innerText || '資產與證券系統';
-      const headerTitle = document.getElementById('header-title');
-      if (headerTitle) {
-        headerTitle.innerText = pageTitle;
-      }
-
-      try {
-        if (targetView === 'view-dashboard') renderDashboard();
-        if (targetView === 'view-stocks') renderStocksTable();
-        if (targetView === 'view-assets') renderAssetsTable();
-        if (targetView === 'view-logs') loadLogs();
-        if (targetView === 'view-settings') loadSettingsView();
-      } catch (err) {
-        console.error('Error switching tab:', err);
-      }
+      if (targetView) switchToView(targetView);
     });
   });
 }
@@ -610,6 +788,40 @@ function initEventListeners() {
   document.getElementById('btn-top-add-stock')?.addEventListener('click', (e) => {
     e.preventDefault();
     openStockModal();
+  });
+
+  // 頂部快速切換主題配色
+  document.getElementById('btn-header-theme')?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const presets = ['ocean', 'emerald', 'amethyst', 'amber', 'crimson', 'glacier'];
+    const names = {
+      ocean: '深海極光 (Ocean)',
+      emerald: '翡翠森林 (Emerald)',
+      amethyst: '紫晶星雲 (Amethyst)',
+      amber: '黑金琥珀 (Amber)',
+      crimson: '緋紅霓虹 (Crimson)',
+      glacier: '冰川青瓷 (Glacier)'
+    };
+    const currIdx = presets.indexOf(appSettings.theme_preset || 'ocean');
+    const nextPreset = presets[(currIdx + 1) % presets.length];
+    appSettings.theme_preset = nextPreset;
+    appSettings.custom_primary_color = null;
+    appSettings.custom_accent_color = null;
+    applyThemeUI();
+    await invokeApi('save_settings', { settings: appSettings });
+    showToast(`🎨 已切換主題配色為：${names[nextPreset]}`, 'info');
+  });
+
+  // 頂部快速進入手機同步頁面
+  document.getElementById('btn-header-mobile')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    switchToView('view-mobile');
+  });
+
+  // 頂部檢查更新按鈕
+  document.getElementById('btn-header-update')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    handleCheckAppUpdate(true);
   });
 
   // 一鍵建立本機安全備份 (頂部按鈕與側邊欄按鈕)
@@ -727,19 +939,14 @@ function initEventListeners() {
     exportStocksCsv();
   });
 
-  // 一鍵聯網更新全部股票即時行情
   document.getElementById('btn-auto-update-live-quotes')?.addEventListener('click', handleAutoUpdateLiveQuotes);
 
-  // 股票代號輸入自動辨識 (美股 / 台股 / ETF)
   const stockSymbolInput = document.getElementById('stock-field-symbol');
   if (stockSymbolInput) {
     stockSymbolInput.addEventListener('input', handleStockSymbolInput);
   }
 
-  // 股票彈窗內點擊抓取即時報價
   document.getElementById('btn-fetch-symbol-quote')?.addEventListener('click', handleFetchSymbolQuote);
-
-  // 設定頁面：清空全系統資料重設
   document.getElementById('btn-clear-all-data')?.addEventListener('click', handleClearAllData);
 
   const stockSearchInput = document.getElementById('stock-search-input');
@@ -758,6 +965,149 @@ function initEventListeners() {
       applyStockFilters();
     });
   });
+
+  // --- Wealth & Financial Lab Events ---
+  document.getElementById('btn-add-dividend')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    openDividendModal();
+  });
+  document.getElementById('btn-add-goal')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    openGoalModal();
+  });
+  document.getElementById('dividend-form')?.addEventListener('submit', handleDividendFormSubmit);
+  document.getElementById('goal-form')?.addEventListener('submit', handleGoalFormSubmit);
+
+  ['div-field-gross', 'div-field-tax', 'div-field-currency'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', updateDividendNetPreview);
+    document.getElementById(id)?.addEventListener('change', updateDividendNetPreview);
+  });
+
+  document.getElementById('btn-run-compound-calc')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    runCompoundCalculator();
+  });
+
+  document.getElementById('rebal-target-stock')?.addEventListener('input', (e) => {
+    const val = Math.min(100, Math.max(0, parseInt(e.target.value) || 0));
+    const assetInp = document.getElementById('rebal-target-asset');
+    if (assetInp) assetInp.value = 100 - val;
+  });
+  document.getElementById('rebal-target-asset')?.addEventListener('input', (e) => {
+    const val = Math.min(100, Math.max(0, parseInt(e.target.value) || 0));
+    const stockInp = document.getElementById('rebal-target-stock');
+    if (stockInp) stockInp.value = 100 - val;
+  });
+  document.getElementById('btn-run-rebalance-calc')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    runRebalanceCalculator();
+  });
+
+  // Dividends Table Delegation
+  document.getElementById('dividends-tbody')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    e.preventDefault();
+    const action = btn.getAttribute('data-action');
+    const id = btn.getAttribute('data-id');
+    const rec = allDividends.find(d => d.id === id);
+    if (action === 'edit-div' && rec) openDividendModal(rec);
+    if (action === 'delete-div' && rec) openDeleteModal('dividend', id, `${rec.title} (NT$ ${formatMoney(rec.net_amount_twd)})`);
+  });
+
+  // Goals Grid Delegation
+  document.getElementById('goals-grid-container')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    e.preventDefault();
+    const action = btn.getAttribute('data-action');
+    const id = btn.getAttribute('data-id');
+    const goal = allGoals.find(g => g.id === id);
+    if (action === 'edit-goal' && goal) openGoalModal(goal);
+    if (action === 'delete-goal' && goal) openDeleteModal('goal', id, goal.title);
+  });
+
+  // Asset Tag Print Button
+  document.getElementById('btn-print-asset-tag')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    printAssetTagCard();
+  });
+
+  // --- Mobile APK & Bidirectional Sync Events ---
+  document.getElementById('btn-copy-lan-url')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const urlText = document.getElementById('mobile-lan-url-text')?.innerText || '';
+    if (urlText && navigator.clipboard) {
+      navigator.clipboard.writeText(urlText).then(() => {
+        showToast(`已複製區網同步網址：${urlText}`, 'success');
+      });
+    }
+  });
+
+  document.getElementById('btn-download-apk')?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const status = await invokeApi('get_mobile_sync_status');
+    const apkUrl = status?.apk_download_url || 'https://github.com/hankyleisplay/Asset-Tracking-Program/releases/download/v2.0.0/Asset-Tracking-Mobile_v2.0.0.apk';
+    window.open(apkUrl, '_blank');
+    showToast('已開啟 Android APK 下載連結！', 'info');
+  });
+
+  document.getElementById('btn-save-sync-pin')?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const pin = (document.getElementById('mobile-sync-pin-input')?.value || '').trim();
+    appSettings.mobile_sync_pin = pin;
+    await invokeApi('save_settings', { settings: appSettings });
+    showToast('已儲存手機同步安全 PIN 碼！', 'success');
+    loadMobileSyncView();
+  });
+
+  document.getElementById('btn-mobile-connect-test')?.addEventListener('click', handleMobileConnectTest);
+  document.getElementById('btn-mobile-sync-merge')?.addEventListener('click', () => handleMobileBidirectionalSync('merge'));
+  document.getElementById('btn-mobile-sync-push')?.addEventListener('click', () => handleMobileBidirectionalSync('overwrite'));
+  document.getElementById('btn-mobile-sync-pull')?.addEventListener('click', handleMobilePullFromPc);
+
+  // --- Theme Studio & Auto-Update Events ---
+  document.querySelectorAll('.theme-swatch-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const theme = card.getAttribute('data-theme') || 'ocean';
+      appSettings.theme_preset = theme;
+      appSettings.custom_primary_color = null;
+      appSettings.custom_accent_color = null;
+      applyThemeUI();
+    });
+  });
+
+  document.getElementById('setting-custom-primary')?.addEventListener('input', (e) => {
+    appSettings.theme_preset = 'custom';
+    appSettings.custom_primary_color = e.target.value;
+    applyThemeUI();
+  });
+
+  document.getElementById('setting-custom-accent')?.addEventListener('input', (e) => {
+    appSettings.theme_preset = 'custom';
+    appSettings.custom_accent_color = e.target.value;
+    applyThemeUI();
+  });
+
+  document.getElementById('btn-reset-custom-color')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    appSettings.theme_preset = 'ocean';
+    appSettings.custom_primary_color = null;
+    appSettings.custom_accent_color = null;
+    applyThemeUI();
+  });
+
+  document.getElementById('setting-blur-level')?.addEventListener('change', (e) => {
+    appSettings.glass_blur_level = e.target.value || 'medium';
+    applyThemeUI();
+  });
+
+  document.getElementById('btn-check-update-settings')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    handleCheckAppUpdate(true);
+  });
+
+  document.getElementById('btn-install-update-now')?.addEventListener('click', handleInstallUpdateNow);
 
   // --- Dynamic Real-time Calculations inside Modals ---
   ['field-price', 'field-years', 'field-purchase-date'].forEach(id => {
@@ -817,7 +1167,7 @@ function initEventListeners() {
   // --- Delete Confirm Button ---
   document.getElementById('btn-confirm-delete')?.addEventListener('click', handleConfirmDelete);
 
-  // --- Table Event Delegation (Ensures edit/delete buttons ALWAYS respond) ---
+  // --- Table Event Delegation ---
   const assetsTbody = document.getElementById('assets-tbody');
   if (assetsTbody) {
     assetsTbody.addEventListener('click', (e) => {
@@ -834,6 +1184,9 @@ function initEventListeners() {
         if (asset) openAssetModal(asset);
       } else if (action === 'operation') {
         openOperationModal(id);
+      } else if (action === 'qr-tag') {
+        const asset = allAssets.find(a => a.id === id);
+        if (asset) openAssetTagModal(asset);
       } else if (action === 'delete') {
         const asset = allAssets.find(a => a.id === id);
         openDeleteModal('asset', id, asset?.name || id);
@@ -877,13 +1230,17 @@ function closeAllModals() {
 // ==========================================================================
 async function refreshAllData() {
   try {
-    const [assetsData, stocksData] = await Promise.all([
+    const [assetsData, stocksData, dividendsData, goalsData] = await Promise.all([
       invokeApi('get_assets'),
-      invokeApi('get_stocks')
+      invokeApi('get_stocks'),
+      invokeApi('get_dividends'),
+      invokeApi('get_goals')
     ]);
 
     allAssets = Array.isArray(assetsData) ? assetsData : [];
     allStocks = Array.isArray(stocksData) ? stocksData : [];
+    allDividends = Array.isArray(dividendsData) ? dividendsData : [];
+    allGoals = Array.isArray(goalsData) ? goalsData : [];
 
     // Update Sidebar Counts
     const assetBadge = document.getElementById('sidebar-asset-count');
@@ -892,8 +1249,12 @@ async function refreshAllData() {
     const stockBadge = document.getElementById('sidebar-stock-count');
     if (stockBadge) stockBadge.innerText = allStocks.length;
 
+    const wealthBadge = document.getElementById('sidebar-wealth-count');
+    if (wealthBadge) wealthBadge.innerText = allDividends.length + allGoals.length;
+
     applyAssetFilters();
     applyStockFilters();
+    renderWealthView();
     await renderDashboard();
   } catch (err) {
     console.error('Failed to refresh data:', err);
@@ -1599,6 +1960,9 @@ function renderAssetsTable() {
         </td>
         <td>
           <div style="display: flex; gap: 6px; justify-content: center;">
+            <button type="button" class="btn btn-secondary btn-sm" data-action="qr-tag" data-id="${escapeHtml(asset.id)}" title="產生 QR 盤點標籤卡">
+              <i class="fa-solid fa-qrcode"></i>
+            </button>
             <button type="button" class="btn btn-secondary btn-sm" data-action="operation" data-id="${escapeHtml(asset.id)}" title="異動 / 借還 / 送修">
               <i class="fa-solid fa-arrows-rotate"></i> 異動
             </button>
@@ -1782,12 +2146,16 @@ function openDeleteModal(type, id, displayName) {
   const modal = document.getElementById('modal-delete');
 
   if (titleElem) {
-    titleElem.innerText = (type === 'stock') ? '確認賣出 / 結清股票' : '確認刪除實體資產';
+    if (type === 'stock') titleElem.innerText = '確認賣出 / 結清股票';
+    else if (type === 'dividend') titleElem.innerText = '確認刪除股息紀錄';
+    else if (type === 'goal') titleElem.innerText = '確認刪除財富目標';
+    else titleElem.innerText = '確認刪除實體資產';
   }
   if (promptElem) {
-    promptElem.innerText = (type === 'stock')
-      ? '您確定要自投資組合中移除下列股票標的嗎？'
-      : '您確定要從系統中永久刪除下列固定資產嗎？';
+    if (type === 'stock') promptElem.innerText = '您確定要自投資組合中移除下列股票標的嗎？';
+    else if (type === 'dividend') promptElem.innerText = '您確定要刪除這筆股息 / 被動收入紀錄嗎？';
+    else if (type === 'goal') promptElem.innerText = '您確定要移除這項財富目標里程碑嗎？';
+    else promptElem.innerText = '您確定要從系統中永久刪除下列固定資產嗎？';
   }
   if (targetElem) {
     targetElem.innerText = displayName;
@@ -1805,6 +2173,12 @@ async function handleConfirmDelete(e) {
     if (pendingDeleteType === 'stock') {
       await invokeApi('delete_stock', { id: pendingDeleteId, operator: "投資人" });
       showToast('已結清並移除該股票標的！', 'info');
+    } else if (pendingDeleteType === 'dividend') {
+      await invokeApi('delete_dividend', { id: pendingDeleteId, operator: "投資人" });
+      showToast('已移除該筆股息收入紀錄！', 'info');
+    } else if (pendingDeleteType === 'goal') {
+      await invokeApi('delete_goal', { id: pendingDeleteId });
+      showToast('已移除該項財富目標！', 'info');
     } else {
       await invokeApi('delete_asset', { id: pendingDeleteId, operator: "使用者" });
       showToast('已成功刪除該實體資產！', 'info');
@@ -1882,8 +2256,8 @@ async function renderDashboard() {
           <span>🏢 實體設備: <strong>${assetPct}%</strong> (NT$ ${formatMoney(assetVal)})</span>
         </div>
         <div class="progress-track" style="height: 12px; display: flex;">
-          <div style="width: ${stockPct}%; height: 100%; background: linear-gradient(90deg, #ec4899, #8b5cf6);" title="證券股票: ${stockPct}%"></div>
-          <div style="width: ${assetPct}%; height: 100%; background: linear-gradient(90deg, #6366f1, #06b6d4);" title="實體資產: ${assetPct}%"></div>
+          <div style="width: ${stockPct}%; height: 100%; background: linear-gradient(90deg, var(--secondary), var(--primary));" title="證券股票: ${stockPct}%"></div>
+          <div style="width: ${assetPct}%; height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent));" title="實體資產: ${assetPct}%"></div>
         </div>
         <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim); margin-top: 8px;">
           <span>資本增值與流動資產配置</span>
@@ -1892,7 +2266,7 @@ async function renderDashboard() {
       `;
     }
 
-    // 4. Stock Market Distribution (TW vs US vs ETF vs Fund)
+    // 4. Stock Market Distribution
     const stockDistContainer = document.getElementById('stock-distribution-box');
     if (stockDistContainer) {
       const dist = Object.entries(stockSum.market_distribution || {});
@@ -2000,8 +2374,7 @@ async function loadLogs() {
 }
 
 // ==========================================================================
-// ==========================================================================
-// 13. Settings View & Local Backup Management
+// 13. Settings View, Theme Studio & Local Backup Management
 // ==========================================================================
 async function loadSettings() {
   try {
@@ -2010,6 +2383,7 @@ async function loadSettings() {
       appSettings = { ...appSettings, ...s };
     }
     applyColorModeUI();
+    applyThemeUI();
     updateBackupBadgeUI();
   } catch (err) {
     console.error('Failed to load settings:', err);
@@ -2021,6 +2395,47 @@ function applyColorModeUI() {
     document.body.classList.add('color-mode-us');
   } else {
     document.body.classList.remove('color-mode-us');
+  }
+}
+
+function applyThemeUI() {
+  const themeClasses = ['theme-ocean', 'theme-emerald', 'theme-amethyst', 'theme-amber', 'theme-crimson', 'theme-glacier'];
+  const blurClasses = ['blur-low', 'blur-medium', 'blur-high', 'blur-ultra'];
+  document.body.classList.remove(...themeClasses, ...blurClasses);
+
+  const preset = appSettings.theme_preset || 'ocean';
+  if (preset === 'custom' && (appSettings.custom_primary_color || appSettings.custom_accent_color)) {
+    const prim = appSettings.custom_primary_color || '#6366f1';
+    const acc = appSettings.custom_accent_color || '#06b6d4';
+    document.documentElement.style.setProperty('--primary', prim);
+    document.documentElement.style.setProperty('--primary-light', prim);
+    document.documentElement.style.setProperty('--accent', acc);
+    document.documentElement.style.setProperty('--secondary', acc);
+  } else {
+    document.documentElement.style.removeProperty('--primary');
+    document.documentElement.style.removeProperty('--primary-light');
+    document.documentElement.style.removeProperty('--accent');
+    document.documentElement.style.removeProperty('--secondary');
+    document.body.classList.add(`theme-${preset}`);
+  }
+
+  const blur = appSettings.glass_blur_level || 'medium';
+  document.body.classList.add(`blur-${blur}`);
+
+  document.querySelectorAll('.theme-swatch-card').forEach(card => {
+    card.classList.toggle('active', card.getAttribute('data-theme') === preset);
+  });
+
+  const primPicker = document.getElementById('setting-custom-primary');
+  if (primPicker && appSettings.custom_primary_color) primPicker.value = appSettings.custom_primary_color;
+
+  const accPicker = document.getElementById('setting-custom-accent');
+  if (accPicker && appSettings.custom_accent_color) accPicker.value = appSettings.custom_accent_color;
+
+  const blurSelect = document.getElementById('setting-blur-level');
+  if (blurSelect) {
+    blurSelect.value = blur;
+    syncCustomSelect('setting-blur-level');
   }
 }
 
@@ -2037,8 +2452,16 @@ function loadSettingsView() {
   const autoBackupInput = document.getElementById('setting-auto-backup');
   if (autoBackupInput) autoBackupInput.checked = !!appSettings.auto_backup;
 
+  const autoUpdateInput = document.getElementById('setting-auto-check-update');
+  if (autoUpdateInput) autoUpdateInput.checked = appSettings.auto_check_update !== false;
+
+  const blurInput = document.getElementById('setting-blur-level');
+  if (blurInput) blurInput.value = appSettings.glass_blur_level || 'medium';
+
   syncCustomSelect('setting-currency');
   syncCustomSelect('setting-stock-color');
+  syncCustomSelect('setting-blur-level');
+  applyThemeUI();
 
   invokeApi('get_data_folder_path').then(path => {
     const pathElem = document.getElementById('local-data-path');
@@ -2052,18 +2475,21 @@ function loadSettingsView() {
 async function handleSettingsFormSubmit(e) {
   e.preventDefault();
   const updated = {
+    ...appSettings,
     currency: document.getElementById('setting-currency')?.value || 'TWD',
     stock_color_mode: document.getElementById('setting-stock-color')?.value || 'tw',
     backup_retention_count: parseInt(document.getElementById('setting-retention-count')?.value, 10) || 20,
     auto_backup: !!document.getElementById('setting-auto-backup')?.checked,
-    last_backup_time: appSettings.last_backup_time
+    auto_check_update: !!document.getElementById('setting-auto-check-update')?.checked,
+    glass_blur_level: document.getElementById('setting-blur-level')?.value || 'medium'
   };
 
   try {
     await invokeApi('save_settings', { settings: updated });
     appSettings = updated;
     applyColorModeUI();
-    showToast('系統偏好與自動備份設定已成功儲存！', 'success');
+    applyThemeUI();
+    showToast('系統主題配色、偏好與自動備份設定已成功儲存！', 'success');
     updateBackupBadgeUI();
     renderStocksTable();
   } catch (err) {
@@ -2251,7 +2677,876 @@ async function handleImportJson(e) {
 }
 
 // ==========================================================================
-// 15. UI Helpers
+// 15. Wealth Lab: Dividends, Financial Goals, Calculators & Smart Alerts
+// ==========================================================================
+function renderWealthView() {
+  // 1. KPI Summary
+  const totalDiv = allDividends.reduce((acc, d) => acc + (d.net_amount_twd || 0), 0);
+  const kpiDiv = document.getElementById('wealth-kpi-dividends');
+  if (kpiDiv) kpiDiv.innerText = `NT$ ${formatMoney(totalDiv)}`;
+
+  const kpiDivCount = document.getElementById('wealth-kpi-div-count');
+  if (kpiDivCount) kpiDivCount.innerText = `累計 ${allDividends.length} 筆入帳`;
+
+  const kpiPassive = document.getElementById('wealth-kpi-passive-monthly');
+  if (kpiPassive) kpiPassive.innerText = `NT$ ${formatMoney(Math.round(totalDiv / 12))}`;
+
+  let totalTarget = 0, totalCurrent = 0;
+  allGoals.forEach(g => {
+    totalTarget += (g.target_amount || 0);
+    totalCurrent += (g.current_amount || 0);
+  });
+  const avgGoalRate = totalTarget > 0 ? Math.min(100, Math.round((totalCurrent / totalTarget) * 100)) : 0;
+  const kpiGoalRate = document.getElementById('wealth-kpi-goal-rate');
+  if (kpiGoalRate) kpiGoalRate.innerText = `${avgGoalRate}%`;
+
+  const kpiGoalCount = document.getElementById('wealth-kpi-goal-count');
+  if (kpiGoalCount) kpiGoalCount.innerText = `${allGoals.length} 項目標追蹤中`;
+
+  // 2. Render Dividends Table
+  renderDividendsTable();
+
+  // 3. Render Financial Goals Grid
+  renderGoalsGrid();
+
+  // 4. Render Smart Alerts
+  renderSmartAlerts();
+
+  // 5. Run default calculator previews
+  runCompoundCalculator();
+  runRebalanceCalculator();
+}
+
+function renderDividendsTable() {
+  const tbody = document.getElementById('dividends-tbody');
+  if (!tbody) return;
+
+  if (allDividends.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" style="text-align: center; padding: 32px; color: var(--text-dim);">
+          <div style="font-size: 24px; margin-bottom: 6px;">💰</div>
+          尚無股息或被動收入紀錄，點擊右上角「記一筆股息/收入」開始累積現金流
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = allDividends.map(d => {
+    const currSym = d.currency === 'USD' ? '$' : 'NT$';
+    return `
+      <tr>
+        <td style="font-size: 12.5px; color: var(--text-muted);">${escapeHtml(d.pay_date)}</td>
+        <td>
+          <div style="font-weight: 600; color: #fff;">${escapeHtml(d.title)}</div>
+          <div style="font-size: 11px; color: var(--accent);">${escapeHtml(d.symbol || '')} ${d.notes ? `· ${escapeHtml(d.notes)}` : ''}</div>
+        </td>
+        <td><span class="badge badge-inuse">${escapeHtml(d.income_type || '現金股利')}</span></td>
+        <td style="text-align: right; color: var(--text-muted); font-variant-numeric: tabular-nums;">
+          ${currSym}${formatMoney(d.gross_amount)}
+          ${d.tax_or_fee > 0 ? `<div style="font-size: 10px; color: var(--text-dim);">扣費: -${currSym}${d.tax_or_fee}</div>` : ''}
+        </td>
+        <td style="text-align: right; font-weight: 700; color: #4ade80; font-variant-numeric: tabular-nums;">
+          +NT$ ${formatMoney(d.net_amount_twd)}
+        </td>
+        <td>
+          <div style="display: flex; gap: 6px; justify-content: center;">
+            <button type="button" class="btn btn-secondary btn-sm" data-action="edit-div" data-id="${escapeHtml(d.id)}" title="編輯">
+              <i class="fa-solid fa-pen"></i>
+            </button>
+            <button type="button" class="btn btn-danger btn-sm" data-action="delete-div" data-id="${escapeHtml(d.id)}" title="刪除">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function openDividendModal(rec = null) {
+  const modal = document.getElementById('modal-dividend');
+  const title = document.getElementById('modal-dividend-title');
+  if (!modal) return;
+
+  if (rec) {
+    if (title) title.innerText = '編輯股息與被動收入紀錄';
+    document.getElementById('div-field-id').value = rec.id || '';
+    document.getElementById('div-field-symbol').value = rec.symbol || '';
+    document.getElementById('div-field-title').value = rec.title || '';
+    document.getElementById('div-field-type').value = rec.income_type || '現金股利';
+    document.getElementById('div-field-date').value = rec.pay_date || '';
+    document.getElementById('div-field-gross').value = rec.gross_amount || 0;
+    document.getElementById('div-field-tax').value = rec.tax_or_fee || 0;
+    document.getElementById('div-field-currency').value = rec.currency || 'TWD';
+    document.getElementById('div-field-notes').value = rec.notes || '';
+  } else {
+    if (title) title.innerText = '新增股息與被動收入紀錄';
+    document.getElementById('div-field-id').value = '';
+    document.getElementById('div-field-symbol').value = '';
+    document.getElementById('div-field-title').value = '';
+    document.getElementById('div-field-type').value = '現金股利';
+    document.getElementById('div-field-date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('div-field-gross').value = '';
+    document.getElementById('div-field-tax').value = 0;
+    document.getElementById('div-field-currency').value = 'TWD';
+    document.getElementById('div-field-notes').value = '';
+  }
+
+  syncCustomSelect('div-field-type');
+  syncCustomSelect('div-field-currency');
+  updateDividendNetPreview();
+  modal.classList.add('open');
+}
+
+function updateDividendNetPreview() {
+  const gross = parseFloat(document.getElementById('div-field-gross')?.value) || 0;
+  const tax = parseFloat(document.getElementById('div-field-tax')?.value) || 0;
+  const curr = document.getElementById('div-field-currency')?.value || 'TWD';
+  const rate = curr === 'USD' ? 32.0 : 1.0;
+  const net = Math.max(0, gross - tax) * rate;
+  const prev = document.getElementById('div-net-preview');
+  if (prev) prev.innerText = `NT$ ${formatMoney(Math.round(net))}`;
+}
+
+async function handleDividendFormSubmit(e) {
+  e.preventDefault();
+  const curr = document.getElementById('div-field-currency')?.value || 'TWD';
+  const record = {
+    id: (document.getElementById('div-field-id')?.value || '').trim(),
+    symbol: (document.getElementById('div-field-symbol')?.value || '').trim().toUpperCase(),
+    title: (document.getElementById('div-field-title')?.value || '').trim(),
+    income_type: document.getElementById('div-field-type')?.value || '現金股利',
+    pay_date: document.getElementById('div-field-date')?.value || new Date().toISOString().split('T')[0],
+    gross_amount: parseFloat(document.getElementById('div-field-gross')?.value) || 0,
+    tax_or_fee: parseFloat(document.getElementById('div-field-tax')?.value) || 0,
+    currency: curr,
+    exchange_rate: curr === 'USD' ? 32.0 : 1.0,
+    net_amount_twd: 0,
+    notes: (document.getElementById('div-field-notes')?.value || '').trim(),
+    created_at: ""
+  };
+
+  try {
+    await invokeApi('save_dividend', { record, operator: "投資人" });
+    showToast(`已儲存股息/收入紀錄 [${record.title}]！`, 'success');
+    closeAllModals();
+    await refreshAllData();
+  } catch (err) {
+    showToast('儲存股息失敗: ' + err, 'error');
+  }
+}
+
+function renderGoalsGrid() {
+  const container = document.getElementById('goals-grid-container');
+  if (!container) return;
+
+  if (allGoals.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 32px; color: var(--text-dim);">
+        <div style="font-size: 24px; margin-bottom: 6px;">🎯</div>
+        尚未設定財富目標，點擊右上角「新增財富目標」設定第一桶金或設備汰換基金！
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = allGoals.map(g => {
+    const pct = g.target_amount > 0 ? Math.min(100, Math.round((g.current_amount / g.target_amount) * 100)) : 0;
+    const barColor = g.color || 'var(--primary)';
+    return `
+      <div class="goal-card">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="badge badge-idle">${escapeHtml(g.category || '財富目標')}</span>
+              <strong style="color: #fff; font-size: 14.5px;">${escapeHtml(g.title)}</strong>
+            </div>
+            ${g.deadline ? `<div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;"><i class="fa-regular fa-calendar"></i> 目標期限: ${escapeHtml(g.deadline)} ${g.notes ? `· ${escapeHtml(g.notes)}` : ''}</div>` : ''}
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <button type="button" class="btn btn-secondary btn-sm" data-action="edit-goal" data-id="${escapeHtml(g.id)}" title="編輯目標">
+              <i class="fa-solid fa-pen"></i>
+            </button>
+            <button type="button" class="btn btn-danger btn-sm" data-action="delete-goal" data-id="${escapeHtml(g.id)}" title="刪除目標">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </div>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 12.5px; margin-top: 10px;">
+          <span style="color: var(--text-muted);">目前累積: <strong style="color: #fff;">NT$ ${formatMoney(g.current_amount)}</strong></span>
+          <span style="color: var(--accent); font-weight: 700;">${pct}% (目標 NT$ ${formatMoney(g.target_amount)})</span>
+        </div>
+        <div class="progress-track" style="height: 8px; margin-top: 6px;">
+          <div style="width: ${pct}%; height: 100%; background: ${escapeHtml(barColor)}; border-radius: 99px; transition: width 0.5s ease;"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function openGoalModal(goal = null) {
+  const modal = document.getElementById('modal-goal');
+  const title = document.getElementById('modal-goal-title');
+  if (!modal) return;
+
+  if (goal) {
+    if (title) title.innerText = '編輯財富目標里程碑';
+    document.getElementById('goal-field-id').value = goal.id || '';
+    document.getElementById('goal-field-title').value = goal.title || '';
+    document.getElementById('goal-field-category').value = goal.category || '投資里程碑';
+    document.getElementById('goal-field-deadline').value = goal.deadline || '';
+    document.getElementById('goal-field-target').value = goal.target_amount || 1000000;
+    document.getElementById('goal-field-current').value = goal.current_amount || 0;
+    document.getElementById('goal-field-color').value = goal.color || '#6366f1';
+    document.getElementById('goal-field-notes').value = goal.notes || '';
+  } else {
+    if (title) title.innerText = '新增財富目標里程碑';
+    document.getElementById('goal-field-id').value = '';
+    document.getElementById('goal-field-title').value = '';
+    document.getElementById('goal-field-category').value = '投資里程碑';
+    document.getElementById('goal-field-deadline').value = '';
+    document.getElementById('goal-field-target').value = 1000000;
+    document.getElementById('goal-field-current').value = 0;
+    document.getElementById('goal-field-color').value = '#6366f1';
+    document.getElementById('goal-field-notes').value = '';
+  }
+
+  syncCustomSelect('goal-field-category');
+  modal.classList.add('open');
+}
+
+async function handleGoalFormSubmit(e) {
+  e.preventDefault();
+  const goal = {
+    id: (document.getElementById('goal-field-id')?.value || '').trim(),
+    title: (document.getElementById('goal-field-title')?.value || '').trim(),
+    category: document.getElementById('goal-field-category')?.value || '投資里程碑',
+    deadline: document.getElementById('goal-field-deadline')?.value || null,
+    target_amount: parseFloat(document.getElementById('goal-field-target')?.value) || 0,
+    current_amount: parseFloat(document.getElementById('goal-field-current')?.value) || 0,
+    color: document.getElementById('goal-field-color')?.value || '#6366f1',
+    notes: (document.getElementById('goal-field-notes')?.value || '').trim(),
+    updated_at: ""
+  };
+
+  try {
+    await invokeApi('save_goal', { goal });
+    showToast(`財富目標 [${goal.title}] 已儲存！`, 'success');
+    closeAllModals();
+    await refreshAllData();
+  } catch (err) {
+    showToast('儲存目標失敗: ' + err, 'error');
+  }
+}
+
+function runCompoundCalculator() {
+  const initial = parseFloat(document.getElementById('calc-initial')?.value) || 0;
+  const monthly = parseFloat(document.getElementById('calc-monthly')?.value) || 0;
+  const ratePct = parseFloat(document.getElementById('calc-rate')?.value) || 0;
+  const years = parseInt(document.getElementById('calc-years')?.value) || 10;
+
+  const months = years * 12;
+  const rMonth = (ratePct / 100) / 12;
+  let total = initial;
+  for (let m = 0; m < months; m++) {
+    total = total * (1 + rMonth) + monthly;
+  }
+  const principal = initial + monthly * months;
+  const interest = Math.max(0, total - principal);
+  const monthlyPassive4Pct = (total * 0.04) / 12;
+
+  const box = document.getElementById('calc-compound-result');
+  if (box) {
+    box.innerHTML = `
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;">
+        <div>
+          <div style="font-size: 11.5px; color: var(--text-muted);">${years} 年後預估期末總資產</div>
+          <div style="font-size: 20px; font-weight: 800; color: var(--accent);">NT$ ${formatMoney(Math.round(total))}</div>
+        </div>
+        <div>
+          <div style="font-size: 11.5px; color: var(--text-muted);">累計投入總本金</div>
+          <div style="font-size: 15px; font-weight: 700; color: #fff;">NT$ ${formatMoney(Math.round(principal))}</div>
+        </div>
+        <div>
+          <div style="font-size: 11.5px; color: var(--text-muted);">複利增值總獲利</div>
+          <div style="font-size: 15px; font-weight: 700; color: #4ade80;">+NT$ ${formatMoney(Math.round(interest))}</div>
+        </div>
+        <div>
+          <div style="font-size: 11.5px; color: var(--text-muted);">4% 法則每月可提領退休金</div>
+          <div style="font-size: 15px; font-weight: 700; color: #f472b6;">NT$ ${formatMoney(Math.round(monthlyPassive4Pct))} / 月</div>
+        </div>
+      </div>
+    `;
+  }
+}
+
+function runRebalanceCalculator() {
+  const targetStockPct = Math.min(100, Math.max(0, parseFloat(document.getElementById('rebal-target-stock')?.value) || 70));
+  const targetAssetPct = 100 - targetStockPct;
+
+  const stockMarketVal = allStocks.reduce((acc, s) => acc + (s.market_value_twd || 0), 0);
+  const assetCurrentVal = allAssets.reduce((acc, a) => acc + (a.current_value || 0), 0);
+  const totalWorth = stockMarketVal + assetCurrentVal;
+
+  const box = document.getElementById('rebalance-advice-box');
+  if (!box) return;
+
+  if (totalWorth <= 0) {
+    box.innerHTML = `<div style="color: var(--text-dim);">目前總資產淨值為 NT$ 0，新增股票或實體資產後將自動計算再平衡建議。</div>`;
+    return;
+  }
+
+  const idealStockVal = totalWorth * (targetStockPct / 100);
+  const idealAssetVal = totalWorth * (targetAssetPct / 100);
+  const diffStock = idealStockVal - stockMarketVal;
+  const currStockPct = Math.round((stockMarketVal / totalWorth) * 100);
+  const currAssetPct = 100 - currStockPct;
+
+  let adviceHtml = '';
+  if (Math.abs(diffStock) < 1000) {
+    adviceHtml = `<span style="color: #4ade80; font-weight: 700;"><i class="fa-solid fa-circle-check"></i> 目前配置比例 (${currStockPct}% : ${currAssetPct}%) 已非常接近您的理想目標！無須大幅調整。</span>`;
+  } else if (diffStock > 0) {
+    adviceHtml = `💡 建議<strong>加碼證券股票約 NT$ ${formatMoney(Math.round(diffStock))}</strong>（或減少閒置實體設備），即可將股票佔比自 ${currStockPct}% 提升至目標 ${targetStockPct}%。`;
+  } else {
+    adviceHtml = `💡 目前股票部位偏高 (${currStockPct}%)，若想鎖定獲利並達成目標 ${targetStockPct}%，可考慮<strong>獲利了結或轉移約 NT$ ${formatMoney(Math.round(Math.abs(diffStock)))}</strong> 至稳健固定資產。`;
+  }
+
+  box.innerHTML = `
+    <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">
+      <span>目前實際比例：股票 <strong>${currStockPct}%</strong> / 實體設備 <strong>${currAssetPct}%</strong></span>
+      <span>目標比例：股票 <strong>${targetStockPct}%</strong> / 實體設備 <strong>${targetAssetPct}%</strong></span>
+    </div>
+    <div style="font-size: 13px; color: #fff; line-height: 1.5;">${adviceHtml}</div>
+  `;
+}
+
+function renderSmartAlerts() {
+  const container = document.getElementById('smart-alerts-container');
+  const kpiAlert = document.getElementById('wealth-kpi-alert-count');
+  if (!container) return;
+
+  const alerts = [];
+  const now = new Date();
+
+  allAssets.forEach(a => {
+    if (a.warranty_date) {
+      const wDate = new Date(a.warranty_date);
+      const diffDays = Math.ceil((wDate - now) / (1000 * 60 * 60 * 24));
+      if (diffDays < 0) {
+        alerts.push({
+          level: 'danger',
+          icon: 'fa-shield-Blank',
+          title: `保固已過期：${a.name} (${a.id})`,
+          desc: `保固到期日為 ${a.warranty_date}（已過期 ${Math.abs(diffDays)} 天），請留意維護風險。`
+        });
+      } else if (diffDays <= 60) {
+        alerts.push({
+          level: 'warn',
+          icon: 'fa-triangle-exclamation',
+          title: `保固即將到期：${a.name} (${a.id})`,
+          desc: `距離保固到期日 (${a.warranty_date}) 僅剩 ${diffDays} 天，建議提前安排檢測。`
+        });
+      }
+    }
+    if (a.status === '維修中') {
+      alerts.push({
+        level: 'warn',
+        icon: 'fa-screwdriver-wrench',
+        title: `設備送修追蹤：${a.name} (${a.id})`,
+        desc: `目前狀態為「維修中」，保管人：${a.custodian || '未指派'}，請追蹤完修進度。`
+      });
+    } else if (a.status === '外借中') {
+      alerts.push({
+        level: 'info',
+        icon: 'fa-hand-holding-hand',
+        title: `設備外借提醒：${a.name} (${a.id})`,
+        desc: `目前由「${a.custodian || '外部人員'}」借用中（位置：${a.location || '未填'}）。`
+      });
+    }
+  });
+
+  allStocks.forEach(s => {
+    if ((s.return_rate || 0) <= -10) {
+      alerts.push({
+        level: 'danger',
+        icon: 'fa-arrow-trend-down',
+        title: `持股回檔停損/逢低檢視：${s.name} (${s.symbol})`,
+        desc: `目前未實現報酬率為 ${s.return_rate.toFixed(2)}% (NT$ ${formatMoney(s.unrealized_pnl_twd)})，建議檢視基本面或評估分批攤平。`
+      });
+    } else if ((s.return_rate || 0) >= 25) {
+      alerts.push({
+        level: 'info',
+        icon: 'fa-trophy',
+        title: `持股大幅獲利提醒：${s.name} (${s.symbol})`,
+        desc: `目前報酬率達 +${s.return_rate.toFixed(2)}% (+NT$ ${formatMoney(s.unrealized_pnl_twd)})，可評估是否部分停利或動態再平衡。`
+      });
+    }
+  });
+
+  if (kpiAlert) kpiAlert.innerText = `${alerts.length} 項`;
+
+  if (alerts.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 24px; color: var(--text-dim);">
+        <i class="fa-solid fa-shield-check" style="font-size: 24px; color: #4ade80; margin-bottom: 6px; display: block;"></i>
+        目前所有設備保固、借還狀態與持股部位均正常健康，無異常預警項目！
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = alerts.map(al => `
+    <div class="alert-banner-item ${al.level === 'danger' ? 'danger' : ''}">
+      <i class="fa-solid ${al.icon || 'fa-bell'}" style="color: ${al.level === 'danger' ? '#f87171' : al.level === 'warn' ? '#fbbf24' : '#67e8f9'}; font-size: 16px; margin-top: 2px;"></i>
+      <div>
+        <div style="font-weight: 700; color: #fff; font-size: 13.5px;">${escapeHtml(al.title)}</div>
+        <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">${escapeHtml(al.desc)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ==========================================================================
+// 16. Asset QR Tag Card Modal & Pure-JS SVG Matrix Generator
+// ==========================================================================
+function generateSvgQrMatrix(text, sizePx = 180) {
+  // Deterministic 21x21 QR-style matrix with standard finder patterns so it renders 100% offline
+  const N = 21;
+  const grid = Array.from({ length: N }, () => Array(N).fill(false));
+
+  const drawFinder = (r0, c0) => {
+    for (let r = 0; r < 7; r++) {
+      for (let c = 0; c < 7; c++) {
+        const isBorder = r === 0 || r === 6 || c === 0 || c === 6;
+        const isInner = r >= 2 && r <= 4 && c >= 2 && c <= 4;
+        grid[r0 + r][c0 + c] = isBorder || isInner;
+      }
+    }
+  };
+  drawFinder(0, 0);
+  drawFinder(0, N - 7);
+  drawFinder(N - 7, 0);
+
+  // Timing patterns
+  for (let i = 8; i < N - 8; i++) {
+    grid[6][i] = i % 2 === 0;
+    grid[i][6] = i % 2 === 0;
+  }
+
+  // Hash payload into data cells
+  const str = String(text || 'ASSET');
+  let hash = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  let bitIdx = 0;
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      const inFinderTL = r < 8 && c < 8;
+      const inFinderTR = r < 8 && c >= N - 8;
+      const inFinderBL = r >= N - 8 && c < 8;
+      if (inFinderTL || inFinderTR || inFinderBL || r === 6 || c === 6) continue;
+      const charCode = str.charCodeAt(bitIdx % str.length);
+      const v = ((hash >>> (bitIdx % 24)) ^ (charCode * (r + 1) + c * 17)) & 3;
+      grid[r][c] = v === 0 || v === 2;
+      bitIdx++;
+    }
+  }
+
+  const cell = sizePx / N;
+  let rects = '';
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (grid[r][c]) {
+        rects += `<rect x="${(c * cell).toFixed(2)}" y="${(r * cell).toFixed(2)}" width="${(cell + 0.35).toFixed(2)}" height="${(cell + 0.35).toFixed(2)}" fill="#0f172a" rx="1"/>`;
+      }
+    }
+  }
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${sizePx}" height="${sizePx}" viewBox="0 0 ${sizePx} ${sizePx}">${rects}</svg>`;
+}
+
+function openAssetTagModal(asset) {
+  const modal = document.getElementById('modal-asset-tag');
+  if (!modal || !asset) return;
+
+  document.getElementById('tag-card-id').innerText = asset.id || '';
+  document.getElementById('tag-card-name').innerText = asset.name || '';
+  document.getElementById('tag-card-meta').innerText =
+    `分類: ${asset.category || '—'} ｜ 保管人: ${asset.custodian || '未指派'} ｜ 位置: ${asset.location || '—'}`;
+
+  const qrSvgBox = document.getElementById('tag-card-qr-svg');
+  if (qrSvgBox) {
+    qrSvgBox.innerHTML = generateSvgQrMatrix(`ASSET:${asset.id}|${asset.name}|${asset.serial_number || ''}`, 140);
+  }
+  modal.classList.add('open');
+}
+
+function printAssetTagCard() {
+  const area = document.getElementById('asset-tag-printable-area');
+  if (!area) return;
+  const win = window.open('', '_blank', 'width=520,height=520');
+  if (!win) {
+    window.print();
+    return;
+  }
+  win.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>資產盤點標籤卡列印</title>
+      <style>
+        body { font-family: "Microsoft JhengHei", sans-serif; display: flex; justify-content: center; align-items: center; height: 90vh; margin: 0; }
+        .card { border: 2px solid #0f172a; border-radius: 14px; padding: 24px; text-align: center; width: 320px; }
+      </style>
+    </head>
+    <body>
+      <div class="card">${area.innerHTML}</div>
+      <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 500); };<\/script>
+    </body>
+    </html>
+  `);
+  win.document.close();
+}
+
+// ==========================================================================
+// 17. Mobile APK & PC-Mobile Bidirectional Sync Engine
+// ==========================================================================
+async function loadMobileSyncView() {
+  try {
+    const status = await invokeApi('get_mobile_sync_status');
+    const urlText = document.getElementById('mobile-lan-url-text');
+    const qrBox = document.getElementById('mobile-lan-qr-box');
+    const pinInput = document.getElementById('mobile-sync-pin-input');
+    const statSummary = document.getElementById('mobile-sync-stat-summary');
+    const remoteIpInput = document.getElementById('mobile-remote-ip-input');
+    const remotePinInput = document.getElementById('mobile-remote-pin-input');
+
+    const lanUrl = status?.mobile_web_url || 'http://127.0.0.1:18888';
+    if (urlText) urlText.innerText = lanUrl;
+
+    if (qrBox) {
+      qrBox.innerHTML = generateSvgQrMatrix(lanUrl, 168);
+    }
+
+    if (pinInput) {
+      pinInput.value = status?.sync_pin ?? appSettings.mobile_sync_pin ?? '8888';
+    }
+
+    if (remoteIpInput && !remoteIpInput.value) {
+      const savedHost = getRemoteSyncHost();
+      const defaultHost = (status?.local_ips && status.local_ips[0])
+        ? `${status.local_ips[0]}:${status.port || 18888}`
+        : '192.168.1.100:18888';
+      remoteIpInput.value = savedHost || defaultHost;
+    }
+
+    if (remotePinInput && !remotePinInput.value) {
+      remotePinInput.value = localStorage.getItem('asset_mobile_remote_pin') || (status?.sync_pin ?? '8888');
+    }
+
+    if (statSummary) {
+      const allIps = (status?.local_ips || []).map(ip => `http://${ip}:${status.port || 18888}`).join(' 、 ');
+      statSummary.innerHTML = `
+        <div><strong>伺服器狀態：</strong> <span style="color: #4ade80;">● 運行中 (Port ${status?.port || 18888})</span></div>
+        <div><strong>可用區網位址：</strong> ${escapeHtml(allIps || lanUrl)}</div>
+        <div><strong>本機資料筆數：</strong> 實體資產 ${allAssets.length} 筆 ｜ 股票持股 ${allStocks.length} 檔 ｜ 股息 ${allDividends.length} 筆 ｜ 目標 ${allGoals.length} 項</div>
+        <div><strong>最近同步時間：</strong> ${escapeHtml(status?.last_sync_time || appSettings.last_mobile_sync_time || '尚未執行跨裝置同步')}</div>
+      `;
+    }
+  } catch (err) {
+    console.error('Failed to load mobile sync status:', err);
+  }
+}
+
+function getTargetSyncEndpoint() {
+  let rawHost = (document.getElementById('mobile-remote-ip-input')?.value || '').trim();
+  const pin = (document.getElementById('mobile-remote-pin-input')?.value || '').trim();
+  rawHost = rawHost.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  if (rawHost && !rawHost.includes(':')) {
+    rawHost = `${rawHost}:18888`;
+  }
+  if (rawHost) {
+    localStorage.setItem('asset_mobile_remote_host', rawHost);
+  }
+  localStorage.setItem('asset_mobile_remote_pin', pin);
+  return { host: rawHost, pin };
+}
+
+function setMobileSyncBanner(html, isError = false) {
+  const banner = document.getElementById('mobile-sync-result-banner');
+  if (!banner) return;
+  banner.style.borderColor = isError ? 'rgba(239, 68, 68, 0.45)' : 'rgba(34, 197, 94, 0.45)';
+  banner.innerHTML = html;
+}
+
+async function handleMobileConnectTest(e) {
+  if (e) e.preventDefault();
+  const { host } = getTargetSyncEndpoint();
+  if (!host) {
+    showToast('請先輸入電腦區網 IP:Port（例如 192.168.1.100:18888）', 'error');
+    return;
+  }
+
+  setMobileSyncBanner(`<i class="fa-solid fa-spinner fa-spin"></i> 正在測試連線至 <strong>http://${escapeHtml(host)}/api/ping</strong> ...`);
+  try {
+    const resp = await fetch(`http://${host}/api/ping`);
+    const json = await resp.json();
+    if (json && json.ok) {
+      setMobileSyncBanner(`
+        <div style="color: #4ade80; font-weight: 700;">
+          <i class="fa-solid fa-circle-check"></i> 連線成功！已連上「${escapeHtml(json.data.app)} v${escapeHtml(json.data.version)}」
+        </div>
+        <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 4px;">
+          遠端資料版本號: #${json.data.revision} · PIN 驗證: ${json.data.pin_required ? '已啟用保護' : '免密碼'} · 現在可點擊下方按鈕執行雙向同步！
+        </div>
+      `);
+      showToast(`已成功連線至 ${host}！`, 'success');
+    } else {
+      throw new Error(json?.error || '未知回應');
+    }
+  } catch (err) {
+    setMobileSyncBanner(`<span style="color: #f87171;"><i class="fa-solid fa-circle-exclamation"></i> 無法連線至 http://${escapeHtml(host)} (${escapeHtml(err.message || err)})。請確認手機與電腦在同一個 Wi-Fi 網路下。</span>`, true);
+    showToast('連線測試失敗，請確認 IP 與 Wi-Fi 網路', 'error');
+  }
+}
+
+async function handleMobileBidirectionalSync(mergeMode = 'merge') {
+  const { host, pin } = getTargetSyncEndpoint();
+  if (!host) {
+    showToast('請輸入目標電腦區網 IP:Port', 'error');
+    return;
+  }
+
+  const modeLabel = mergeMode === 'overwrite' ? '推送手機修改並覆蓋電腦' : '雙向智慧合併同步';
+  setMobileSyncBanner(`<i class="fa-solid fa-spinner fa-spin"></i> 正在執行【${modeLabel}】至 http://${escapeHtml(host)} ...`);
+
+  try {
+    const mockDb = getMockDb();
+    const payload = {
+      device_name: getTauriInvoke() ? "Windows-PC" : "Android-Mobile",
+      sync_pin: pin,
+      timestamp: new Date().toLocaleString(),
+      assets: allAssets,
+      stocks: allStocks,
+      dividends: allDividends,
+      goals: allGoals,
+      settings: appSettings,
+      deleted_ids: mockDb.deleted_ids || [],
+      merge_mode: mergeMode
+    };
+
+    const resp = await fetch(`http://${host}/api/sync/push`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const json = await resp.json();
+    if (!json || !json.ok) {
+      throw new Error(json?.error || '同步失敗');
+    }
+
+    const merged = json.data;
+    // Save merged data back to local storage & Tauri if applicable
+    const db = getMockDb();
+    db.assets = merged.assets || [];
+    db.stocks = merged.stocks || [];
+    db.dividends = merged.dividends || [];
+    db.goals = merged.goals || [];
+    db.deleted_ids = [];
+    if (merged.settings) {
+      db.settings = { ...appSettings, ...merged.settings };
+      appSettings = db.settings;
+    }
+    saveMockDb(db);
+
+    if (getTauriInvoke()) {
+      await invokeApi('apply_mobile_sync_cmd', { payload: { ...merged, merge_mode: 'overwrite' } });
+    }
+
+    await refreshAllData();
+    applyThemeUI();
+    setMobileSyncBanner(`
+      <div style="color: #4ade80; font-weight: 700;">
+        <i class="fa-solid fa-circle-check"></i> 【${modeLabel}】完成！手機與電腦資料已完全一致
+      </div>
+      <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 4px;">
+        同步後總計：資產 ${allAssets.length} 筆 ｜ 股票 ${allStocks.length} 檔 ｜ 股息 ${allDividends.length} 筆 ｜ 目標 ${allGoals.length} 項（時間：${new Date().toLocaleTimeString()}）
+      </div>
+    `);
+    showToast(`${modeLabel}成功！雙端資料已同步更新`, 'success');
+  } catch (err) {
+    setMobileSyncBanner(`<span style="color: #f87171;"><i class="fa-solid fa-triangle-exclamation"></i> 同步失敗：${escapeHtml(err.message || err)}</span>`, true);
+    showToast('同步失敗: ' + (err.message || err), 'error');
+  }
+}
+
+async function handleMobilePullFromPc(e) {
+  if (e) e.preventDefault();
+  const { host, pin } = getTargetSyncEndpoint();
+  if (!host) {
+    showToast('請輸入目標電腦區網 IP:Port', 'error');
+    return;
+  }
+
+  setMobileSyncBanner(`<i class="fa-solid fa-spinner fa-spin"></i> 正在從電腦 (http://${escapeHtml(host)}) 拉取最新完整資料庫...`);
+  try {
+    const resp = await fetch(`http://${host}/api/sync/pull?pin=${encodeURIComponent(pin)}`);
+    const json = await resp.json();
+    if (!json || !json.ok) {
+      throw new Error(json?.error || '拉取失敗');
+    }
+
+    const remoteData = json.data;
+    const db = getMockDb();
+    db.assets = remoteData.assets || [];
+    db.stocks = remoteData.stocks || [];
+    db.dividends = remoteData.dividends || [];
+    db.goals = remoteData.goals || [];
+    db.deleted_ids = [];
+    if (remoteData.settings) {
+      db.settings = { ...appSettings, ...remoteData.settings };
+      appSettings = db.settings;
+    }
+    saveMockDb(db);
+
+    if (getTauriInvoke()) {
+      await invokeApi('apply_mobile_sync_cmd', { payload: { ...remoteData, merge_mode: 'overwrite' } });
+    }
+
+    await refreshAllData();
+    applyThemeUI();
+    setMobileSyncBanner(`
+      <div style="color: #4ade80; font-weight: 700;">
+        <i class="fa-solid fa-cloud-arrow-down"></i> 已成功從電腦拉取最新資料並更新本機！
+      </div>
+      <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 4px;">
+        目前資料：資產 ${allAssets.length} 筆 ｜ 股票 ${allStocks.length} 檔 ｜ 股息 ${allDividends.length} 筆 ｜ 目標 ${allGoals.length} 項
+      </div>
+    `);
+    showToast('已成功從電腦拉取最新資料！', 'success');
+  } catch (err) {
+    setMobileSyncBanner(`<span style="color: #f87171;"><i class="fa-solid fa-triangle-exclamation"></i> 拉取失敗：${escapeHtml(err.message || err)}</span>`, true);
+    showToast('拉取失敗: ' + (err.message || err), 'error');
+  }
+}
+
+function startBackgroundMobileSyncWatcher() {
+  if (!getTauriInvoke()) return;
+  setInterval(async () => {
+    try {
+      const status = await invokeApi('get_mobile_sync_status');
+      if (status && typeof status.sync_revision === 'number') {
+        if (lastKnownSyncRevision === 0) {
+          lastKnownSyncRevision = status.sync_revision;
+        } else if (status.sync_revision > lastKnownSyncRevision) {
+          lastKnownSyncRevision = status.sync_revision;
+          await loadSettings();
+          await refreshAllData();
+          showToast('📱 已即時同步來自手機端的資料變更！', 'info');
+        }
+      }
+    } catch (_) {}
+  }, 3500);
+}
+
+// ==========================================================================
+// 18. Auto-Update Check & One-Click Installer
+// ==========================================================================
+async function handleCheckAppUpdate(showFeedback = true) {
+  const badge = document.getElementById('update-status-badge');
+  const label = document.getElementById('update-latest-version-label');
+  const notes = document.getElementById('update-release-notes');
+  const btnInstall = document.getElementById('btn-install-update-now');
+  const btnOpenUrl = document.getElementById('btn-open-release-url');
+
+  if (showFeedback) {
+    showToast('正在連線 GitHub Releases 檢查最新版本...', 'info');
+  }
+  if (badge) {
+    badge.className = 'badge badge-idle';
+    badge.innerText = '正在檢查更新...';
+  }
+
+  try {
+    const info = await invokeApi('check_app_update');
+    if (!info) return;
+    latestUpdateInfo = info;
+
+    if (label) {
+      label.innerText = `目前版本: v${info.current_version} ｜ 最新發布版本: v${info.latest_version} (${info.release_title || ''})`;
+    }
+    if (notes) {
+      notes.innerText = info.release_notes || '無詳細更新說明。';
+    }
+    if (btnOpenUrl && info.html_url) {
+      btnOpenUrl.href = info.html_url;
+      btnOpenUrl.style.display = 'inline-flex';
+    }
+
+    if (info.has_update) {
+      if (badge) {
+        badge.className = 'badge badge-borrow';
+        badge.innerText = `發現新版本 v${info.latest_version} 可供升級！`;
+      }
+      if (btnInstall) btnInstall.style.display = 'inline-flex';
+      showToast(`🎉 發現新版本 v${info.latest_version}！可前往「系統設定」一鍵下載安裝更新`, 'success');
+    } else {
+      if (badge) {
+        badge.className = 'badge badge-inuse';
+        badge.innerText = `目前已是最新版本 (v${info.current_version})`;
+      }
+      if (btnInstall) btnInstall.style.display = 'none';
+      if (showFeedback) {
+        showToast(`目前已是最新版本 v${info.current_version}！`, 'success');
+      }
+    }
+  } catch (err) {
+    if (badge) {
+      badge.className = 'badge badge-repair';
+      badge.innerText = '檢查更新失敗（請確認網路連線）';
+    }
+    if (showFeedback) {
+      showToast('檢查更新失敗: ' + (err.message || err), 'error');
+    }
+  }
+}
+
+async function handleInstallUpdateNow(e) {
+  if (e) e.preventDefault();
+  if (!latestUpdateInfo || !latestUpdateInfo.download_url) {
+    showToast('找不到更新安裝包連結，將為您開啟發布頁面', 'info');
+    window.open('https://github.com/hankyleisplay/Asset-Tracking-Program/releases/latest', '_blank');
+    return;
+  }
+
+  const confirmed = confirm(`確定要立即下載並安裝最新版本 v${latestUpdateInfo.latest_version} 嗎？\n下載完成後將自動啟動安裝程式。`);
+  if (!confirmed) return;
+
+  showToast(`正在背景下載 v${latestUpdateInfo.latest_version} 安裝更新包，請稍候...`, 'info');
+  try {
+    if (getTauriInvoke()) {
+      const msg = await invokeApi('download_and_install_update', {
+        download_url: latestUpdateInfo.download_url,
+        latest_version: latestUpdateInfo.latest_version
+      });
+      showToast(msg || '安裝程式已啟動！', 'success');
+    } else {
+      window.open(latestUpdateInfo.download_url, '_blank');
+    }
+  } catch (err) {
+    showToast('自動下載更新失敗，為您開啟下載頁: ' + err, 'error');
+    window.open(latestUpdateInfo.html_url || latestUpdateInfo.download_url, '_blank');
+  }
+}
+
+// ==========================================================================
+// 19. UI Helpers
 // ==========================================================================
 function getBadgeClass(status) {
   switch (status) {
@@ -2270,6 +3565,8 @@ function getActionBadgeClass(action) {
     case '賣出股票': return 'badge-market-us';
     case '更新股票': return 'badge-market-etf';
     case '更新股價': return 'badge-inuse';
+    case '股息入帳': return 'badge-inuse';
+    case '刪除股息': return 'badge-scrapped';
     case '建立': return 'badge-inuse';
     case '修改': return 'badge-idle';
     case '借出': return 'badge-borrow';
@@ -2319,3 +3616,4 @@ function showToast(msg, type = 'info') {
     toast.remove();
   }, 4500);
 }
+

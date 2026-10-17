@@ -1,6 +1,8 @@
 use crate::backup_engine::BackupEngine;
+use crate::mobile_sync;
 use crate::models::{
-    AppSettings, Asset, AssetLog, BackupInfo, DashboardStats, StockAsset, StockQuote, StockSummary,
+    AppSettings, Asset, AssetLog, BackupInfo, DashboardStats, DividendRecord, FinancialGoal,
+    MobileSyncStatus, StockAsset, StockQuote, StockSummary, SyncPayload, UpdateCheckResult,
 };
 use crate::storage::{AppState, StorageManager};
 use chrono::Local;
@@ -902,3 +904,296 @@ pub async fn auto_update_all_live_quotes(
 
     Ok(updated_stocks)
 }
+
+// ==========================================================================
+// 股息與被動收入 (Dividends & Passive Income)
+// ==========================================================================
+#[tauri::command]
+pub fn get_dividends(state: State<AppState>) -> Result<Vec<DividendRecord>, String> {
+    let storage = state.lock().map_err(|e| e.to_string())?;
+    Ok(storage.load_dividends())
+}
+
+#[tauri::command]
+pub async fn save_dividend(
+    state: State<'_, AppState>,
+    mut dividend: DividendRecord,
+    operator: String,
+) -> Result<DividendRecord, String> {
+    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    if dividend.id.trim().is_empty() {
+        dividend.id = format!("DIV-{}", Uuid::new_v4().to_string()[..8].to_uppercase());
+        dividend.created_at = now.clone();
+    }
+
+    let storage = state.lock().map_err(|e| e.to_string())?;
+    let mut list = storage.load_dividends();
+    if let Some(pos) = list.iter().position(|d| d.id == dividend.id) {
+        list[pos] = dividend.clone();
+    } else {
+        list.insert(0, dividend.clone());
+    }
+    storage.save_dividends(&list)?;
+
+    let op = if operator.trim().is_empty() {
+        "投資人".to_string()
+    } else {
+        operator
+    };
+
+    let _ = storage.add_log(AssetLog {
+        id: Uuid::new_v4().to_string(),
+        asset_id: dividend.symbol.clone(),
+        asset_name: dividend.name.clone(),
+        action: "領取股息".to_string(),
+        operator: op,
+        details: format!(
+            "登記股息收入: {} ({}) [{}] 實領 NT$ {}",
+            dividend.name, dividend.symbol, dividend.dividend_type, dividend.amount_twd
+        ),
+        timestamp: now,
+    });
+
+    let s = storage.load_settings();
+    if s.auto_backup {
+        let _ = BackupEngine::create_backup(&storage, "股息紀錄異動自動備份");
+    }
+
+    Ok(dividend)
+}
+
+#[tauri::command]
+pub async fn delete_dividend(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    let storage = state.lock().map_err(|e| e.to_string())?;
+    let mut list = storage.load_dividends();
+    list.retain(|d| d.id != id);
+    storage.save_dividends(&list)?;
+    Ok(())
+}
+
+// ==========================================================================
+// 財富目標與里程碑 (Financial Goals & Milestones)
+// ==========================================================================
+#[tauri::command]
+pub fn get_goals(state: State<AppState>) -> Result<Vec<FinancialGoal>, String> {
+    let storage = state.lock().map_err(|e| e.to_string())?;
+    Ok(storage.load_goals())
+}
+
+#[tauri::command]
+pub async fn save_goal(
+    state: State<'_, AppState>,
+    mut goal: FinancialGoal,
+) -> Result<FinancialGoal, String> {
+    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    if goal.id.trim().is_empty() {
+        goal.id = format!("GOAL-{}", Uuid::new_v4().to_string()[..8].to_uppercase());
+    }
+    goal.updated_at = now;
+
+    let storage = state.lock().map_err(|e| e.to_string())?;
+    let mut list = storage.load_goals();
+    if let Some(pos) = list.iter().position(|g| g.id == goal.id) {
+        list[pos] = goal.clone();
+    } else {
+        list.push(goal.clone());
+    }
+    storage.save_goals(&list)?;
+
+    let s = storage.load_settings();
+    if s.auto_backup {
+        let _ = BackupEngine::create_backup(&storage, "財富目標異動自動備份");
+    }
+
+    Ok(goal)
+}
+
+#[tauri::command]
+pub async fn delete_goal(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    let storage = state.lock().map_err(|e| e.to_string())?;
+    let mut list = storage.load_goals();
+    list.retain(|g| g.id != id);
+    storage.save_goals(&list)?;
+    Ok(())
+}
+
+// ==========================================================================
+// 手機與電腦雙向同步 (Mobile & PC Bidirectional Sync)
+// ==========================================================================
+#[tauri::command]
+pub fn get_mobile_sync_status(state: State<AppState>) -> Result<MobileSyncStatus, String> {
+    Ok(mobile_sync::get_sync_status(&state))
+}
+
+#[tauri::command]
+pub fn apply_mobile_sync_cmd(
+    state: State<AppState>,
+    payload: SyncPayload,
+) -> Result<serde_json::Value, String> {
+    mobile_sync::apply_mobile_sync(&state, payload)
+}
+
+// ==========================================================================
+// 自動檢查更新與一鍵安裝升級 (Auto Update Engine)
+// ==========================================================================
+fn parse_semver_tuple(ver: &str) -> (u32, u32, u32) {
+    let clean = ver.trim().trim_start_matches('v').trim_start_matches('V');
+    let parts: Vec<&str> = clean.split('.').collect();
+    let major = parts.first().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let minor = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let patch = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+    (major, minor, patch)
+}
+
+#[tauri::command]
+pub async fn check_app_update() -> Result<UpdateCheckResult, String> {
+    let current_version = env!("CARGO_PKG_VERSION").to_string();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .user_agent("AssetTrackingProgram-AutoUpdater/2.0")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let url = "https://api.github.com/repos/hankyleisplay/Asset-Tracking-Program/releases/latest";
+    let resp = client
+        .get(url)
+        .header("Accept", "application/vnd.github.v3+json")
+        .send()
+        .await
+        .map_err(|e| format!("連線更新伺服器失敗: {}", e))?;
+
+    if !resp.status().is_success() {
+        return Ok(UpdateCheckResult {
+            has_update: false,
+            current_version: current_version.clone(),
+            latest_version: current_version,
+            release_name: "目前已是最新版本".to_string(),
+            release_notes: String::new(),
+            published_at: Local::now().format("%Y-%m-%d").to_string(),
+            html_url: "https://github.com/hankyleisplay/Asset-Tracking-Program/releases".to_string(),
+            download_url_setup: None,
+            download_url_portable: None,
+            download_url_apk: None,
+        });
+    }
+
+    let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let tag_name = data
+        .get("tag_name")
+        .and_then(|v| v.as_str())
+        .unwrap_or(&current_version)
+        .trim_start_matches('v')
+        .to_string();
+
+    let release_name = data
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("正式發布版")
+        .to_string();
+
+    let release_notes = data
+        .get("body")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let published_at = data
+        .get("published_at")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let html_url = data
+        .get("html_url")
+        .and_then(|v| v.as_str())
+        .unwrap_or("https://github.com/hankyleisplay/Asset-Tracking-Program/releases")
+        .to_string();
+
+    let mut download_url_setup = None;
+    let mut download_url_portable = None;
+    let mut download_url_apk = None;
+
+    if let Some(assets) = data.get("assets").and_then(|v| v.as_array()) {
+        for asset in assets {
+            let name = asset
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_lowercase();
+            let dl_url = asset
+                .get("browser_download_url")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            if name.contains("setup") && name.ends_with(".exe") {
+                download_url_setup = dl_url;
+            } else if name.ends_with(".apk") {
+                download_url_apk = dl_url;
+            } else if name.ends_with(".exe") {
+                download_url_portable = dl_url;
+            }
+        }
+    }
+
+    let curr_tuple = parse_semver_tuple(&current_version);
+    let latest_tuple = parse_semver_tuple(&tag_name);
+    let has_update = latest_tuple > curr_tuple;
+
+    Ok(UpdateCheckResult {
+        has_update,
+        current_version,
+        latest_version: tag_name,
+        release_name,
+        release_notes,
+        published_at,
+        html_url,
+        download_url_setup,
+        download_url_portable,
+        download_url_apk,
+    })
+}
+
+#[tauri::command]
+pub async fn download_and_install_update(download_url: String) -> Result<String, String> {
+    if download_url.trim().is_empty() {
+        return Err("無效的更新下載連結".to_string());
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .user_agent("AssetTrackingProgram-AutoUpdater/2.0")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client
+        .get(&download_url)
+        .send()
+        .await
+        .map_err(|e| format!("下載更新安裝檔失敗: {}", e))?;
+
+    if !resp.status().is_success() {
+        return Err(format!("下載失敗，HTTP 狀態碼: {}", resp.status()));
+    }
+
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+    let temp_dir = std::env::temp_dir();
+    let filename = if download_url.to_lowercase().ends_with(".apk") {
+        "AssetTracking_Mobile_Latest.apk"
+    } else {
+        "AssetTracking_Update_Setup.exe"
+    };
+    let target_path = temp_dir.join(filename);
+
+    std::fs::write(&target_path, &bytes)
+        .map_err(|e| format!("寫入更新暫存檔失敗: {}", e))?;
+
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "start", "", &target_path.to_string_lossy()])
+            .spawn();
+    }
+
+    Ok(target_path.to_string_lossy().to_string())
+}
+
