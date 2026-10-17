@@ -4,6 +4,7 @@
 [![Powered by Rust](https://img.shields.io/badge/Rust-1.80+-orange.svg?logo=rust)](https://www.rust-lang.org/)
 [![Local Storage](https://img.shields.io/badge/Storage-100%25%20Local%20Safe-emerald.svg)](https://github.com/hankyleisplay/Asset-Tracking-Program)
 [![Mobile Sync](https://img.shields.io/badge/Sync-LAN%20Wi--Fi%202--Way-cyan.svg)](https://github.com/hankyleisplay/Asset-Tracking-Program)
+[![WinGet Package](https://img.shields.io/badge/WinGet-hankyle.AssetTrackingProgram-0078D4.svg?logo=windows)](https://github.com/microsoft/winget-pkgs/pull/454574)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 一套專為個人與工作室設計的高效能**實體固定資產、全球證券股票投資、被動現金流與財務目標追蹤管理系統**。
@@ -54,13 +55,19 @@
 
 ## 🚀 下載與安裝方式
 
-請前往 [GitHub Releases 最新發布頁面 (v2.0.0)](https://github.com/hankyleisplay/Asset-Tracking-Program/releases/latest)：
+### 方式 1：Windows 官方套件管理員 (WinGet 一鍵安裝)
+Windows 10 / 11 系統可直接於 PowerShell 或 Windows Terminal 執行以下指令自動完成下載與安裝：
+```powershell
+winget install hankyle.AssetTrackingProgram
+```
+> 📌 *已提交至微軟官方社群倉庫 [microsoft/winget-pkgs#454574](https://github.com/microsoft/winget-pkgs/pull/454574) 審核中。*
 
-### 1. Windows 電腦版
+### 方式 2：下載 Windows 電腦版安裝檔或免安裝版
+前往 [GitHub Releases 最新發布頁面 (v2.0.0)](https://github.com/hankyleisplay/Asset-Tracking-Program/releases/latest)：
 - **推薦安裝版 (NSIS Setup)**：下載 `Asset.Tracking.Program_2.0.0_x64-setup.exe`，標準 Windows 桌面程式安裝精靈，自動建立桌面捷徑並整合完整更新支援。
 - **免安裝版 (Portable Single EXE)**：下載 `asset-tracking-program.exe`，免安裝直接雙擊即可使用。
 
-### 2. Android 行動版
+### 方式 3：Android 行動版
 - **原生 APK 安裝包**：下載 `Asset-Tracking-Mobile_v2.0.0.apk` 安裝至 Android 手機。
 - **免安裝區網直連**：在電腦版開啟「手機 APK 與同步」功能，手機連上同一個 Wi-Fi 掃描螢幕上的 QR Code 即可免安裝開啟 Web 介面。
 
