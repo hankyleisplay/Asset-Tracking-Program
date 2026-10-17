@@ -16,7 +16,6 @@ npm-debug.log*
 *.tgz
 *.apk
 !src-tauri/icons/*.ico
-!bin/asset-tracking-program.exe
 
 # System & IDE
 .DS_Store
