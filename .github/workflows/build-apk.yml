@@ -30,10 +30,7 @@ jobs:
       - name: Prepare UI Assets and App Icon for Android
         run: |
           mkdir -p android/app/src/main/assets
-          cp ui/index.html android/app/src/main/assets/
-          cp ui/styles.css android/app/src/main/assets/
-          cp ui/app.js android/app/src/main/assets/
-          cp ui/app-icon.svg android/app/src/main/assets/
+          cp -r ui/* android/app/src/main/assets/
           for dir in mipmap-mdpi mipmap-hdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
             mkdir -p "android/app/src/main/res/$dir"
             cp src-tauri/icons/icon.png "android/app/src/main/res/$dir/ic_launcher.png"
