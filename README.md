@@ -1,104 +1,100 @@
-# 📦 資產追蹤系統 (Asset Tracking Program)
+# 📦 資產與證券追蹤系統 (Asset Tracking Program)
 
 [![Built with Tauri](https://img.shields.io/badge/Tauri-v2-blue.svg?logo=tauri)](https://tauri.app/)
 [![Powered by Rust](https://img.shields.io/badge/Rust-1.80+-orange.svg?logo=rust)](https://www.rust-lang.org/)
-[![Local Storage](https://img.shields.io/badge/Storage-Local%20AppData-emerald.svg)](https://github.com/hankyleisplay/Asset-Tracking-Program)
-[![GitHub Sync](https://img.shields.io/badge/GitHub-Auto%20Sync-purple.svg?logo=github)](https://github.com/hankyleisplay/Asset-Tracking-Program)
+[![Local Storage](https://img.shields.io/badge/Storage-100%25%20Local%20Safe-emerald.svg)](https://github.com/hankyleisplay/Asset-Tracking-Program)
+[![Mobile Sync](https://img.shields.io/badge/Sync-LAN%20Wi--Fi%202--Way-cyan.svg)](https://github.com/hankyleisplay/Asset-Tracking-Program)
+[![npm version](https://img.shields.io/npm/v/asset-tracking-program.svg?color=cb3837&logo=npm)](https://www.npmjs.com/package/asset-tracking-program)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-一套使用 **Tauri v2 + Rust** 開發的高效能跨平台桌面資產追蹤與管理系統。所有核心數據均儲存在本機電腦硬碟，具備完整隱私控制與原子寫入保護，並內建 **GitHub 自動同步機制**，每次資產異動時皆可自動發佈備份至 GitHub 倉庫。
+一套專為個人與工作室設計的高效能**實體固定資產、全球證券股票投資、被動現金流與財務目標追蹤管理系統**。
+採用 **Tauri v2 + Rust** 與 **Liquid Glass & Material Design 3** 現代磨砂玻璃視覺風格開發。
+
+> **🔒 100% 本地隱私與安全**：所有資產、持股與日誌資料皆 **100% 儲存在您的本機電腦硬碟**（預設 `%APPDATA%\AssetTracking\`），具備本地自動快照備份保護，**已完全移除任何第三方雲端（如 GitHub 等）的數據同步**，確保您的私人財務與資產數據絕對安全不外洩！
 
 ---
 
 ## ✨ 核心功能亮點
 
-- 💻 **本機持久化儲存 (Local Storage)**
-  - 數據保存在本機使用者目錄（預設 `%APPDATA%\AssetTracking\`），不依賴外部資料庫服務，具備原子性安全寫入，保證斷電或閃退不損壞數據。
-- 📉 **智慧折舊與價值試算 (Depreciation Calculation)**
-  - 內建直線折舊攤銷演算法，輸入購置日期、原價與預估折舊年限後，系統自動根據今日日期動態計算當前資產現值與累計折舊百分比。
-- 🔄 **資產生命週期與異動登記 (Asset Lifecycle & Operations)**
-  - 支援資產**借出 (Check-out)**、**歸還 (Check-in)**、**送修 (Maintenance)**、**完修**與**報廢 (Scrap)** 快速作業，並即時變更保管人與地點。
-- ⚠️ **保固到期預警 (Warranty Alerts)**
-  - 自動篩選 60 天內即將過保之關鍵設備，於儀表板即時警示，方便提前安排續保或設備汰換。
-- 📜 **完整審計歷史日誌 (Audit History Logs)**
-  - 每一筆資產的建立、編輯、狀態異動與刪除皆有精確的時間戳記、操作者與變更詳情紀錄，企業審計一目了然。
-- ☁️ **GitHub 雲端即時同步 (Auto GitHub Sync)**
-  - 內建 GitHub REST API 同步引擎，設定 Token 與倉庫後，每次資產異動皆會自動在背景將資料提交（Commit）至 GitHub，兼顧本地隱私與雲端異地備援。
-- 📊 **現代化可視化儀表板 (Modern Dashboard)**
-  - 統計指標卡片、資產分類佔比進度條、狀態分佈概況、即時搜尋過濾與狀態標籤快速切換。
-- 📁 **批次導入與導出 (Data Import & Export)**
-  - 支援一鍵匯出繁體中文 UTF-8 BOM CSV 清冊報表與完整 JSON 數據檔，亦支援從 JSON 備份檔批次還原。
+### 1. 🏢 實體固定資產管理與智慧折舊
+- **動態折舊試算**：輸入購置日期、原價與折舊年限，直線折舊演算法即時推算設備現值與累計折舊率。
+- **資產生命週期維護**：支援借出、歸還、送修、完修、報廢等快速異動，即時變更保管人與地點。
+- **🏷️ QR 盤點標籤卡產生器**：一鍵產生每項實體設備的專屬 2D 矩陣 QR 標籤卡，可直接列印貼於設備上盤點。
+- **完整審計歷史日誌**：每次資產異動均留下時間戳記、操作者與詳細變更摘要。
+
+### 2. 📈 全球證券股票投資組合追蹤
+- **代號智慧辨識**：輸入股票代號自動辨識台股（含台股 ETF）或美股（含美股 ETF），自動切換計價幣別與即時匯率。
+- **一鍵聯網更新最新行情**：連線金融市場即時更新現價，自動計算總成本、總市值、未實現損益與 ROI 報酬率。
+- **紅綠配色自訂**：支援台灣股市習慣（紅漲綠跌）與國際美股習慣（綠漲紅跌）一鍵切換。
+
+### 3. 📱 手機版 APK 與電腦區網 Wi-Fi 雙向同步
+- **手機端自由新增 / 編輯 / 刪除**：外出時手機版可獨立離線建檔與查閱。
+- **三種同步模式**：
+  - 🔄 **雙向智慧合併**：以最新修改時間戳記智慧合併手機與電腦雙方新增或變更的項目。
+  - ⬆️ **推送手機修改至電腦**：以手機最新數據完整覆蓋同步至電腦端。
+  - ⬇️ **從電腦拉取最新資料**：一鍵將電腦端的完整資料庫同步下載到手機。
+- **免安裝掃碼即連**：電腦版內建區網伺服器（預設 Port `18888`），手機鏡頭掃描畫面上顯示的 QR Code 即可秒開行動端。
+
+### 4. 💎 財富增值與現金流實驗室
+- **💰 股息與被動收入帳本**：詳細記錄現金股利、股票配息、債息與租金收入，統計扣稅實領台幣淨額與月均被動現金流。
+- **🎯 財富目標與里程碑**：設定第一桶金、退休準備金或設備汰換基金，彩色進度條視覺化追蹤達成率。
+- **🧮 定期定額複利試算機**：試算每月投資之期末資產、累積本金與獲利，以及依 4% 法則每月可提領退休金。
+- **⚖️ 資產配置再平衡試算器**：輸入股票與實體資產的目標比例，系統自動給出加碼/減碼金額建議。
+- **🔔 智慧到期與異動預警**：自動掃描保固即將到期/已過期設備、送修中/外借中資產，以及持股大跌停損或大漲獲利提示。
+
+### 5. 🎨 Liquid Glass 主題工坊
+- 內建 **6 款磨砂玻璃主題**：深海極光 (Ocean)、翡翠森林 (Emerald)、紫晶星雲 (Amethyst)、黑金琥珀 (Amber)、緋紅霓虹 (Crimson)、冰川青瓷 (Glacier)。
+- **自訂調色盤**：自訂主色調與次要強調色。
+- **4 段毛玻璃模糊強度**：Low / Medium / High / Ultra 自由調節。
+
+### 6. 🛡️ 本地備份與自動更新中心
+- **本機快照備份**：一鍵建立全系統時間戳記快照，支援備份列表管理、一鍵還原與備份檔 (.json) 匯出/匯入。
+- **🔄 自動檢查更新**：啟動時自動比對 GitHub Releases 最新版本，提供一鍵下載安裝升級。
 
 ---
 
-## 🛠️ 技術架構
+## 🚀 安裝與使用方式
 
+### 方式 1：使用 npm / npx 一鍵啟動 (推薦)
+電腦只要有安裝 Node.js，無須手動下載安裝檔：
+```bash
+# 免安裝直接啟動
+npx asset-tracking-program
+
+# 或全域安裝至電腦
+npm install -g asset-tracking-program
+atp
 ```
-Asset-Tracking-Program/
-├── src-tauri/               # Rust 後端與 Tauri 核心配置
-│   ├── src/
-│   │   ├── main.rs          # 應用程式主入口與 IPC 指令註冊
-│   │   ├── models.rs        # 資料模型 (Asset, AssetLog, AppSettings, DashboardStats)
-│   │   ├── storage.rs       # 本地 JSON 資料庫管理器與折舊計算器
-│   │   ├── github_sync.rs   # GitHub REST API 備份與自動發佈引擎
-│   │   └── commands.rs      # Tauri 前端呼叫接口 (IPC Command Handlers)
-│   ├── Cargo.toml           # Rust 依賴套件清單 (Tauri, Serde, Reqwest, Chrono, Uuid)
-│   ├── tauri.conf.json      # Tauri 視窗與打包設定
-│   └── icons/               # 桌面應用程式圖示
-├── ui/                      # 桌面端前端使用者介面
-│   ├── index.html           # 現代化單頁 UI 結構
-│   ├── styles.css           # 深色磨砂玻璃美學 (Glassmorphism) 樣式
-│   └── app.js               # 前端業務邏輯、IPC 通訊與圖表渲染
-├── scripts/                 # 便捷管理腳本
-│   ├── run.ps1              # 快速啟動開發模式
-│   ├── build.ps1            # 打包編譯正式發行 EXE
-│   └── sync-to-github.ps1   # 程式碼一鍵推送到 GitHub
-├── package.json             # NPM 專案配置
-└── README.md                # 專案詳細說明文件
-```
+
+### 方式 2：下載 Windows 安裝版或免安裝執行檔
+請前往 [GitHub Releases 最新發布頁面](https://github.com/hankyleisplay/Asset-Tracking-Program/releases/latest)：
+- **Windows 安裝版**：下載 `Asset.Tracking.Program_2.0.0_x64-setup.exe` 執行安裝。
+- **Windows 免安裝單一執行檔**：下載 `asset-tracking-program.exe` 直接雙擊開啟。
+
+### 方式 3：下載 Android 手機版 APK
+至 [GitHub Releases 最新發布頁面](https://github.com/hankyleisplay/Asset-Tracking-Program/releases/latest) 下載 `Asset-Tracking-Mobile_v2.0.0.apk` 安裝至 Android 手機，或在電腦版開啟「手機 APK 與同步」掃描 QR Code 透過手機瀏覽器直接使用。
 
 ---
 
-## 🚀 快速開始
+## 🛠️ 開發與編譯
 
-### 1. 環境需求
-請確認電腦已安裝：
-- [Node.js](https://nodejs.org/) (建議 LTS 版本)
-- [Rust & Cargo](https://rustup.rs/)
-- C++ 編譯工具鏈（Windows 建議使用 **Visual Studio C++ Build Tools**）
+### 環境需求
+- [Node.js](https://nodejs.org/) (建議 v18+)
+- [Rust & Cargo](https://rustup.rs/) (建議 1.80+)
+- Windows C++ Build Tools (Visual Studio)
 
-### 2. 安裝相依套件
-在專案根目錄執行：
-```powershell
+### 本地啟動開發模式
+```bash
 npm install
-```
-
-### 3. 本地啟動開發模式
-```powershell
 npm run dev
-# 或直接執行:
-.\scripts\run.ps1
 ```
-Tauri 將會編譯 Rust 後端並啟動高反應性的桌面視窗應用程式。
 
-### 4. 打包生產版本 (產生 Windows 安裝檔 / EXE)
-```powershell
+### 本地編譯生產安裝包
+```bash
 npm run build
-# 或直接執行:
-.\scripts\build.ps1
 ```
-產出的 Windows 執行檔將位於 `src-tauri/target/release/bundle/`。
-
----
-
-## ⚙️ GitHub 同步設定說明
-
-1. 開啟應用程式中的 **「GitHub 同步與設定」** 頁面。
-2. 填寫 GitHub 倉庫名稱：`hankyleisplay/Asset-Tracking-Program`
-3. 填入您的 GitHub Personal Access Token (GHT)（需勾選 `repo` 權限）。
-4. 開啟 **「每次改動自動發佈到 GitHub (Auto-Sync)」**。
-5. 點擊「儲存設定」或點擊側邊欄/頂部的「同步至 GitHub」按鈕即可即時驗證發佈狀態！
 
 ---
 
 ## 📄 授權條款
-本專案採用 [MIT License](LICENSE) 條款開放。
+本專案採用 [MIT License](LICENSE) 開放授權。
