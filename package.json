@@ -1,9 +1,42 @@
 {
   "name": "asset-tracking-program",
   "version": "2.0.0",
-  "private": true,
-  "description": "資產與證券追蹤系統 v2.0 (Asset Tracking Program) - 支援電腦手機雙向同步、自動更新、主題配色與財富管理",
+  "description": "資產與證券追蹤系統 (Asset Tracking Program) Windows 桌面版 - 支援股票損益、實體資產折舊、手機雙向同步與自訂主題",
+  "main": "bin/cli.js",
+  "bin": {
+    "asset-tracking-program": "bin/cli.js",
+    "atp": "bin/cli.js"
+  },
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "keywords": [
+    "asset-tracking",
+    "portfolio",
+    "stocks",
+    "liquid-glass",
+    "tauri",
+    "wealth-management"
+  ],
+  "author": "hankyle",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hankyleisplay/Asset-Tracking-Program.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hankyleisplay/Asset-Tracking-Program/issues"
+  },
+  "homepage": "https://github.com/hankyleisplay/Asset-Tracking-Program#readme",
+  "files": [
+    "bin",
+    "README.md"
+  ],
   "scripts": {
+    "start": "node bin/cli.js",
     "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build",
