@@ -28,6 +28,14 @@ impl StorageManager {
         self.data_dir.clone()
     }
 
+    pub fn backups_dir(&self) -> PathBuf {
+        let dir = self.data_dir.join("backups");
+        if !dir.exists() {
+            let _ = fs::create_dir_all(&dir);
+        }
+        dir
+    }
+
     fn assets_file(&self) -> PathBuf {
         self.data_dir.join("assets.json")
     }

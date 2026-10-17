@@ -1,8 +1,8 @@
 // Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod backup_engine;
 mod commands;
-mod github_sync;
 mod models;
 mod storage;
 
@@ -25,7 +25,11 @@ fn main() {
             commands::get_dashboard_stats,
             commands::get_settings,
             commands::save_settings,
-            commands::sync_to_github_now,
+            commands::create_local_backup,
+            commands::list_local_backups,
+            commands::restore_local_backup,
+            commands::delete_local_backup,
+            commands::export_full_backup_json,
             commands::export_assets_json,
             commands::export_assets_csv,
             commands::import_assets_json,

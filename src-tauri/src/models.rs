@@ -81,12 +81,9 @@ pub struct AssetLog {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
     pub currency: String,
-    pub github_repo: String,
-    pub github_token: String,
-    pub github_branch: String,
-    pub auto_sync: bool,
-    pub last_sync_time: Option<String>,
-    pub last_sync_status: Option<String>,
+    pub auto_backup: bool,
+    pub last_backup_time: Option<String>,
+    pub backup_retention_count: u32,
     pub stock_color_mode: String, // "tw" (紅漲綠跌) 或 "us" (綠漲紅跌)
 }
 
@@ -94,12 +91,9 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             currency: "TWD".to_string(),
-            github_repo: "hankyleisplay/Asset-Tracking-Program".to_string(),
-            github_token: String::new(),
-            github_branch: "main".to_string(),
-            auto_sync: true,
-            last_sync_time: None,
-            last_sync_status: None,
+            auto_backup: true,
+            last_backup_time: None,
+            backup_retention_count: 20,
             stock_color_mode: "tw".to_string(), // 預設台灣習慣紅漲綠跌
         }
     }
@@ -122,9 +116,24 @@ pub struct DashboardStats {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SyncResult {
-    pub success: bool,
-    pub message: String,
+pub struct BackupInfo {
+    pub filename: String,
+    pub filepath: String,
+    pub created_at: String,
+    pub size_kb: f64,
+    pub asset_count: usize,
+    pub stock_count: usize,
+    pub log_count: usize,
+    pub note: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackupPayload {
+    pub version: String,
     pub timestamp: String,
-    pub commit_sha: Option<String>,
+    pub note: String,
+    pub assets: Vec<Asset>,
+    pub stocks: Vec<StockAsset>,
+    pub logs: Vec<AssetLog>,
+    pub settings: AppSettings,
 }

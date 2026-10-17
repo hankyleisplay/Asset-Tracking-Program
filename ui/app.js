@@ -20,12 +20,9 @@ function getTauriInvoke() {
 // 2. Global Application State
 let appSettings = {
   currency: "TWD",
-  github_repo: "hankyleisplay/Asset-Tracking-Program",
-  github_token: "",
-  github_branch: "main",
-  auto_sync: true,
-  last_sync_time: null,
-  last_sync_status: "待命",
+  auto_backup: true,
+  last_backup_time: null,
+  backup_retention_count: 20,
   stock_color_mode: "tw"
 };
 
@@ -65,9 +62,8 @@ async function invokeApi(command, args = {}) {
   }
 }
 
-// 3. Mock Database for Standalone Preview / Offline Fallback
 // 3. Mock Database for Standalone Preview / Offline Fallback (Clean Slate / 0 預設資料)
-const MOCK_STORAGE_KEY = 'asset_tracking_portfolio_clean_v1';
+const MOCK_STORAGE_KEY = 'asset_tracking_portfolio_backup_v1';
 
 function getMockDb() {
   try {
@@ -87,14 +83,12 @@ function getMockDb() {
     assets: [],
     stocks: [],
     logs: [],
+    backups: [],
     settings: {
       currency: "TWD",
-      github_repo: "hankyleisplay/Asset-Tracking-Program",
-      github_token: "",
-      github_branch: "main",
-      auto_sync: true,
-      last_sync_time: null,
-      last_sync_status: "待命",
+      auto_backup: true,
+      last_backup_time: null,
+      backup_retention_count: 20,
       stock_color_mode: "tw"
     }
   };
@@ -324,13 +318,54 @@ function mockApi(command, args) {
     };
   }
 
-  if (command === 'sync_to_github_now') {
-    return {
-      success: true,
-      message: "本地離線模擬: 數據已就緒",
-      timestamp: new Date().toLocaleString(),
-      commit_sha: "local-preview-sha"
+  if (command === 'create_local_backup') {
+    if (!db.backups) db.backups = [];
+    const now = new Date();
+    const tsStr = now.toISOString().replace(/[-:T.]/g, '').slice(0, 15);
+    const displayTs = now.toLocaleString();
+    const item = {
+      filename: `backup_${tsStr}.json`,
+      filepath: `C:\\Users\\hankyle\\AppData\\Roaming\\AssetTracking\\backups\\backup_${tsStr}.json`,
+      created_at: displayTs,
+      size_kb: 2.5,
+      asset_count: (db.assets || []).length,
+      stock_count: (db.stocks || []).length,
+      log_count: (db.logs || []).length,
+      note: args.note || '手動建立備份'
     };
+    db.backups.unshift(item);
+    if (!db.settings) db.settings = appSettings;
+    db.settings.last_backup_time = displayTs;
+    saveMockDb(db);
+    return item;
+  }
+
+  if (command === 'list_local_backups') {
+    return db.backups || [];
+  }
+
+  if (command === 'restore_local_backup') {
+    return '已成功從備份還原！';
+  }
+
+  if (command === 'delete_local_backup') {
+    if (db.backups) {
+      db.backups = db.backups.filter(b => b.filename !== args.filename);
+      saveMockDb(db);
+    }
+    return null;
+  }
+
+  if (command === 'export_full_backup_json') {
+    return JSON.stringify({
+      version: "1.0.0",
+      timestamp: new Date().toLocaleString(),
+      note: "本機全量備份匯出",
+      assets: db.assets || [],
+      stocks: db.stocks || [],
+      logs: db.logs || [],
+      settings: db.settings || appSettings
+    }, null, 2);
   }
 
   if (command === 'clear_all_system_data') {
@@ -405,13 +440,126 @@ function mockApi(command, args) {
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('[AssetTracking] Initializing Liquid Glass & Material Design 3...');
   initNavigation();
+  initCustomSelects();
   initEventListeners();
   await loadSettings();
   await refreshAllData();
 });
 
 // ==========================================================================
-// 5. Navigation System
+// 5. Custom Dropdown Engine (自製 Liquid Glass 下拉選單)
+// ==========================================================================
+function initCustomSelects() {
+  const selects = document.querySelectorAll('select.form-control');
+  selects.forEach(select => {
+    let wrapper = select.parentElement?.querySelector(`.custom-select-wrapper[data-select-id="${select.id}"]`);
+    if (!wrapper) {
+      wrapper = document.createElement('div');
+      wrapper.className = 'custom-select-wrapper';
+      wrapper.setAttribute('data-select-id', select.id);
+
+      const trigger = document.createElement('div');
+      trigger.className = 'custom-select-trigger';
+      trigger.tabIndex = 0;
+
+      const label = document.createElement('span');
+      label.className = 'custom-select-label';
+
+      const arrow = document.createElement('i');
+      arrow.className = 'fa-solid fa-chevron-down custom-select-arrow';
+
+      trigger.appendChild(label);
+      trigger.appendChild(arrow);
+
+      const dropdown = document.createElement('div');
+      dropdown.className = 'custom-select-dropdown';
+
+      wrapper.appendChild(trigger);
+      wrapper.appendChild(dropdown);
+
+      select.style.display = 'none';
+      select.parentNode.insertBefore(wrapper, select.nextSibling);
+
+      trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = wrapper.classList.contains('open');
+        closeAllCustomSelects();
+        if (!isOpen) {
+          wrapper.classList.add('open');
+        }
+      });
+
+      trigger.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const isOpen = wrapper.classList.contains('open');
+          closeAllCustomSelects();
+          if (!isOpen) wrapper.classList.add('open');
+        } else if (e.key === 'Escape') {
+          wrapper.classList.remove('open');
+        }
+      });
+    }
+
+    renderCustomSelectOptions(select, wrapper);
+  });
+}
+
+function renderCustomSelectOptions(select, wrapper) {
+  if (!select || !wrapper) return;
+  const label = wrapper.querySelector('.custom-select-label');
+  const dropdown = wrapper.querySelector('.custom-select-dropdown');
+  if (!dropdown) return;
+  dropdown.innerHTML = '';
+
+  const options = Array.from(select.options);
+  const selectedOption = select.selectedOptions[0] || options[0];
+  if (label && selectedOption) {
+    label.innerText = selectedOption.text;
+  }
+
+  options.forEach(opt => {
+    const isSelected = opt.value === select.value;
+    const optDiv = document.createElement('div');
+    optDiv.className = `custom-select-option ${isSelected ? 'selected' : ''}`;
+    optDiv.setAttribute('data-value', opt.value);
+    optDiv.innerHTML = `
+      <span>${escapeHtml(opt.text)}</span>
+      <i class="fa-solid fa-check option-check"></i>
+    `;
+
+    optDiv.addEventListener('click', (e) => {
+      e.stopPropagation();
+      select.value = opt.value;
+      wrapper.classList.remove('open');
+      renderCustomSelectOptions(select, wrapper);
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      select.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    dropdown.appendChild(optDiv);
+  });
+}
+
+function syncCustomSelect(selectId) {
+  const select = typeof selectId === 'string' ? document.getElementById(selectId) : selectId;
+  if (!select) return;
+  const wrapper = select.parentElement?.querySelector(`.custom-select-wrapper[data-select-id="${select.id}"]`);
+  if (wrapper) {
+    renderCustomSelectOptions(select, wrapper);
+  }
+}
+
+function closeAllCustomSelects() {
+  document.querySelectorAll('.custom-select-wrapper.open').forEach(w => w.classList.remove('open'));
+}
+
+window.addEventListener('click', () => {
+  closeAllCustomSelects();
+});
+
+// ==========================================================================
+// 6. Navigation System
 // ==========================================================================
 function initNavigation() {
   const navItems = document.querySelectorAll('.nav-item');
@@ -450,7 +598,7 @@ function initNavigation() {
 }
 
 // ==========================================================================
-// 6. Global Event Listeners & Button Handlers
+// 7. Global Event Listeners & Button Handlers
 // ==========================================================================
 function initEventListeners() {
   // --- Navigation Header Buttons ---
@@ -464,15 +612,61 @@ function initEventListeners() {
     openStockModal();
   });
 
-  document.getElementById('btn-header-sync')?.addEventListener('click', (e) => {
+  // 一鍵建立本機安全備份 (頂部按鈕與側邊欄按鈕)
+  document.getElementById('btn-header-backup')?.addEventListener('click', handleCreateBackup);
+  document.getElementById('btn-sidebar-backup')?.addEventListener('click', handleCreateBackup);
+
+  // 設定頁面備份中心操作
+  document.getElementById('btn-create-backup')?.addEventListener('click', handleCreateBackup);
+  document.getElementById('btn-export-backup-file')?.addEventListener('click', (e) => {
     e.preventDefault();
-    triggerGitHubSync();
+    handleExportBackupFile();
+  });
+  document.getElementById('btn-import-backup-file')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('file-restore-backup')?.click();
+  });
+  document.getElementById('file-restore-backup')?.addEventListener('change', handleRestoreBackupFile);
+  document.getElementById('btn-refresh-backups')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    loadBackupsList();
   });
 
-  document.getElementById('btn-sidebar-sync')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    triggerGitHubSync();
-  });
+  // 歷史備份列表操作委託 (還原 / 刪除)
+  const backupListElem = document.getElementById('backup-history-list');
+  if (backupListElem) {
+    backupListElem.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      e.preventDefault();
+      const action = btn.getAttribute('data-action');
+      const filename = btn.getAttribute('data-file');
+
+      if (action === 'restore-backup') {
+        const confirmed = confirm(`確定要將系統還原至備份快照 [${filename}] 嗎？\n此操作將覆蓋現有資產與股票數據！`);
+        if (!confirmed) return;
+        try {
+          showToast(`正在自備份 [${filename}] 還原...`, 'info');
+          const msg = await invokeApi('restore_local_backup', { source: filename, operator: '本機快照還原' });
+          showToast(msg || '備份已成功還原！', 'success');
+          await refreshAllData();
+          await loadBackupsList();
+        } catch (err) {
+          showToast('還原備份失敗: ' + err, 'error');
+        }
+      } else if (action === 'delete-backup') {
+        const confirmed = confirm(`確定要刪除歷史備份檔 [${filename}] 嗎？`);
+        if (!confirmed) return;
+        try {
+          await invokeApi('delete_local_backup', { filename });
+          showToast(`已刪除備份檔 [${filename}]`, 'success');
+          await loadBackupsList();
+        } catch (err) {
+          showToast('刪除備份失敗: ' + err, 'error');
+        }
+      }
+    });
+  }
 
   // --- Physical Asset Toolbar & Filters ---
   document.getElementById('btn-add-asset')?.addEventListener('click', (e) => {
@@ -582,6 +776,19 @@ function initEventListeners() {
   document.getElementById('settings-form')?.addEventListener('submit', handleSettingsFormSubmit);
   document.getElementById('batch-prices-form')?.addEventListener('submit', handleBatchPricesSubmit);
   document.getElementById('quick-price-form')?.addEventListener('submit', handleQuickPriceSubmit);
+
+  // Auto-sync operation new-status when action type changes
+  document.getElementById('op-action-type')?.addEventListener('change', (e) => {
+    const type = e.target.value;
+    const statusSelect = document.getElementById('op-new-status');
+    if (statusSelect) {
+      if (type === '借出') statusSelect.value = '外借中';
+      else if (type === '歸還' || type === '完修') statusSelect.value = '在用中';
+      else if (type === '送修') statusSelect.value = '維修中';
+      else if (type === '報廢') statusSelect.value = '已報廢';
+      syncCustomSelect('op-new-status');
+    }
+  });
 
   // --- Modal Close Buttons ---
   document.querySelectorAll('.btn-close-modal').forEach(btn => {
@@ -889,6 +1096,8 @@ function handleStockSymbolInput(e) {
 
     if (marketSelect) marketSelect.value = detected.market;
     if (currencySelect) currencySelect.value = detected.currency;
+    syncCustomSelect('stock-field-market');
+    syncCustomSelect('stock-field-currency');
     if (rateInput) {
       if (detected.currency === 'USD' && (rateInput.value === '1' || rateInput.value === '1.0' || !rateInput.value)) {
         rateInput.value = detected.rate;
@@ -942,6 +1151,8 @@ async function handleFetchSymbolQuote(e) {
       if (quote.name && nameInput) nameInput.value = quote.name;
       if (quote.market && marketSelect) marketSelect.value = quote.market;
       if (quote.currency && currencySelect) currencySelect.value = quote.currency;
+      syncCustomSelect('stock-field-market');
+      syncCustomSelect('stock-field-currency');
       if (quote.current_price && priceInput) priceInput.value = quote.current_price;
       if (quote.exchange_rate && rateInput) rateInput.value = quote.exchange_rate;
 
@@ -1077,6 +1288,8 @@ function openStockModal(stock = null) {
     document.getElementById('stock-field-operator').value = '投資人';
   }
 
+  syncCustomSelect('stock-field-market');
+  syncCustomSelect('stock-field-currency');
   updateStockPnLPreview();
   modal.classList.add('open');
 }
@@ -1448,6 +1661,8 @@ function openAssetModal(asset = null) {
     document.getElementById('field-notes').value = '';
   }
 
+  syncCustomSelect('field-category');
+  syncCustomSelect('field-status');
   updateDepreciationPreview();
   modal.classList.add('open');
 }
@@ -1523,6 +1738,8 @@ function openOperationModal(id) {
   document.getElementById('op-notes').value = '';
   document.getElementById('op-custodian').value = asset.custodian || '';
 
+  syncCustomSelect('op-action-type');
+  syncCustomSelect('op-new-status');
   modal.classList.add('open');
 }
 
@@ -1783,7 +2000,8 @@ async function loadLogs() {
 }
 
 // ==========================================================================
-// 13. Settings View & GitHub Auto-Sync
+// ==========================================================================
+// 13. Settings View & Local Backup Management
 // ==========================================================================
 async function loadSettings() {
   try {
@@ -1792,7 +2010,7 @@ async function loadSettings() {
       appSettings = { ...appSettings, ...s };
     }
     applyColorModeUI();
-    updateSyncBadgeUI();
+    updateBackupBadgeUI();
   } catch (err) {
     console.error('Failed to load settings:', err);
   }
@@ -1807,93 +2025,178 @@ function applyColorModeUI() {
 }
 
 function loadSettingsView() {
-  const repoInput = document.getElementById('setting-repo');
-  if (repoInput) repoInput.value = appSettings.github_repo || '';
-
-  const tokenInput = document.getElementById('setting-token');
-  if (tokenInput) tokenInput.value = appSettings.github_token || '';
-
-  const branchInput = document.getElementById('setting-branch');
-  if (branchInput) branchInput.value = appSettings.github_branch || 'main';
-
-  const autoSyncInput = document.getElementById('setting-auto-sync');
-  if (autoSyncInput) autoSyncInput.checked = !!appSettings.auto_sync;
-
   const currInput = document.getElementById('setting-currency');
   if (currInput) currInput.value = appSettings.currency || 'TWD';
 
   const colorInput = document.getElementById('setting-stock-color');
   if (colorInput) colorInput.value = appSettings.stock_color_mode || 'tw';
 
-  const statusBox = document.getElementById('settings-sync-status-text');
-  if (statusBox) {
-    statusBox.innerText = `最後發佈時間: ${appSettings.last_sync_time || '尚未同步'}\n發佈狀態回應: ${appSettings.last_sync_status || '待命中'}`;
-  }
+  const retentionInput = document.getElementById('setting-retention-count');
+  if (retentionInput) retentionInput.value = appSettings.backup_retention_count || 20;
+
+  const autoBackupInput = document.getElementById('setting-auto-backup');
+  if (autoBackupInput) autoBackupInput.checked = !!appSettings.auto_backup;
+
+  syncCustomSelect('setting-currency');
+  syncCustomSelect('setting-stock-color');
 
   invokeApi('get_data_folder_path').then(path => {
     const pathElem = document.getElementById('local-data-path');
     if (pathElem && path) pathElem.innerText = path;
   }).catch(() => {});
+
+  updateBackupBadgeUI();
+  loadBackupsList();
 }
 
 async function handleSettingsFormSubmit(e) {
   e.preventDefault();
   const updated = {
     currency: document.getElementById('setting-currency')?.value || 'TWD',
-    github_repo: (document.getElementById('setting-repo')?.value || '').trim(),
-    github_token: (document.getElementById('setting-token')?.value || '').trim(),
-    github_branch: (document.getElementById('setting-branch')?.value || 'main').trim(),
-    auto_sync: !!document.getElementById('setting-auto-sync')?.checked,
     stock_color_mode: document.getElementById('setting-stock-color')?.value || 'tw',
-    last_sync_time: appSettings.last_sync_time,
-    last_sync_status: appSettings.last_sync_status
+    backup_retention_count: parseInt(document.getElementById('setting-retention-count')?.value, 10) || 20,
+    auto_backup: !!document.getElementById('setting-auto-backup')?.checked,
+    last_backup_time: appSettings.last_backup_time
   };
 
   try {
     await invokeApi('save_settings', { settings: updated });
     appSettings = updated;
     applyColorModeUI();
-    showToast('系統與同步設定已成功儲存！', 'success');
-    updateSyncBadgeUI();
+    showToast('系統偏好與自動備份設定已成功儲存！', 'success');
+    updateBackupBadgeUI();
     renderStocksTable();
   } catch (err) {
     showToast('儲存設定失敗: ' + err, 'error');
   }
 }
 
-async function triggerGitHubSync() {
-  const dot = document.getElementById('sidebar-sync-dot');
-  const text = document.getElementById('sidebar-sync-text');
-  if (dot) dot.classList.add('syncing');
-  if (text) text.innerText = '同步中...';
-
-  showToast('正在將資產與股票數據發佈至 GitHub...', 'info');
-
-  try {
-    const res = await invokeApi('sync_to_github_now') || {};
-    if (res.success) {
-      showToast(res.message || '發佈成功！', 'success');
-      appSettings.last_sync_time = res.timestamp;
-      appSettings.last_sync_status = res.message;
-      updateSyncBadgeUI();
-    } else {
-      showToast(res.message || '同步失敗', 'error');
-    }
-  } catch (err) {
-    showToast('GitHub 請求失敗: ' + err, 'error');
-  } finally {
-    if (dot) dot.classList.remove('syncing');
-    if (text) text.innerText = 'GitHub 雲端同步';
+function updateBackupBadgeUI() {
+  const text = document.getElementById('sidebar-backup-time');
+  if (text) {
+    text.innerText = appSettings.last_backup_time
+      ? `上次: ${appSettings.last_backup_time.split(' ')[1] || appSettings.last_backup_time}`
+      : '備份已就緒';
+  }
+  const hint = document.getElementById('local-last-backup-hint');
+  if (hint) {
+    hint.innerText = appSettings.last_backup_time
+      ? `上次本機備份完成時間: ${appSettings.last_backup_time} · 自動保護中`
+      : '所有實體固定資產、證券股票持股明細及快照檔均完整儲存於您的硬碟中。';
   }
 }
 
-function updateSyncBadgeUI() {
-  const text = document.getElementById('sidebar-sync-time');
-  if (text) {
-    text.innerText = appSettings.last_sync_time
-      ? `上次: ${appSettings.last_sync_time.split(' ')[1] || appSettings.last_sync_time}`
-      : '未同步';
+async function loadBackupsList() {
+  const container = document.getElementById('backup-history-list');
+  if (!container) return;
+
+  try {
+    const backups = await invokeApi('list_local_backups') || [];
+    if (!Array.isArray(backups) || backups.length === 0) {
+      container.innerHTML = `
+        <div style="text-align: center; color: var(--text-dim); padding: 24px; background: rgba(15, 23, 42, 0.35); border-radius: var(--radius-sm); border: var(--glass-border);">
+          <i class="fa-solid fa-box-open" style="font-size: 28px; color: var(--text-dim); margin-bottom: 8px; display: block;"></i>
+          目前尚無歷史備份快照，點擊上方「立即建立備份」即可儲存第一份安全存檔。
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = backups.map(b => {
+      return `
+        <div class="backup-item">
+          <div style="flex: 1; min-width: 0;">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <i class="fa-solid fa-file-shield" style="color: #67e8f9;"></i>
+              <strong style="color: #fff; font-size: 13.5px; word-break: break-all;">${escapeHtml(b.filename)}</strong>
+              <span class="backup-badge-pill">${escapeHtml(b.note || '快照備份')}</span>
+            </div>
+            <div class="backup-meta">
+              <span><i class="fa-solid fa-clock"></i> ${escapeHtml(b.created_at)}</span>
+              <span><i class="fa-solid fa-database"></i> ${b.size_kb} KB</span>
+              <span><i class="fa-solid fa-boxes-stacked"></i> 資產: ${b.asset_count} 筆</span>
+              <span><i class="fa-solid fa-arrow-trend-up"></i> 股票: ${b.stock_count} 檔</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 6px; flex-shrink: 0;">
+            <button type="button" class="btn btn-secondary btn-sm" data-action="restore-backup" data-file="${escapeHtml(b.filename)}" title="從此備份檔還原資料">
+              <i class="fa-solid fa-rotate-left"></i> 還原
+            </button>
+            <button type="button" class="btn btn-danger btn-sm" data-action="delete-backup" data-file="${escapeHtml(b.filename)}" title="刪除此備份快照">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error('Failed to load backups:', err);
+    container.innerHTML = `<div style="color: #f87171; padding: 12px;">載入備份清單失敗: ${escapeHtml(err)}</div>`;
   }
+}
+
+async function handleCreateBackup(e) {
+  if (e) e.preventDefault();
+  const note = prompt('請輸入備份備註（例如：日常存檔、出差前存檔，可直接點確認使用預設）：', '手動全量備份快照');
+  if (note === null) return;
+
+  showToast('正在建立全系統本機快照備份...', 'info');
+  try {
+    const backup = await invokeApi('create_local_backup', { note: note || '手動全量備份快照' });
+    if (backup) {
+      appSettings.last_backup_time = backup.created_at;
+      updateBackupBadgeUI();
+      showToast(`本機備份 [${backup.filename}] 建立完成！`, 'success');
+      await loadBackupsList();
+    }
+  } catch (err) {
+    showToast('建立備份失敗: ' + err, 'error');
+  }
+}
+
+async function handleExportBackupFile() {
+  try {
+    const jsonStr = await invokeApi('export_full_backup_json');
+    const now = new Date();
+    const dateStr = now.toISOString().replace(/[-:T.]/g, '').slice(0, 15);
+    const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `AssetTracking_Backup_${dateStr}.json`;
+    a.click();
+    showToast('已匯出全量備份檔案 (.json)！', 'success');
+  } catch (err) {
+    showToast('匯出備份失敗: ' + err, 'error');
+  }
+}
+
+async function handleRestoreBackupFile(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = async (evt) => {
+    try {
+      const content = evt.target.result;
+      const confirmed = confirm('【警告：還原全系統備份】\n\n確定要由所選檔案還原資料庫嗎？\n現有的實體資產與股票持股將被備份檔案中的數據覆蓋！');
+      if (!confirmed) {
+        e.target.value = '';
+        return;
+      }
+
+      showToast('正在讀取並還原備份資料...', 'info');
+      const msg = await invokeApi('restore_local_backup', { source: content, operator: '本機檔案還原員' });
+      showToast(msg || '已成功自檔案還原資料庫！', 'success');
+      await refreshAllData();
+      await loadBackupsList();
+    } catch (err) {
+      showToast('還原檔案失敗: ' + err, 'error');
+    } finally {
+      e.target.value = '';
+    }
+  };
+  reader.readAsText(file);
 }
 
 // ==========================================================================

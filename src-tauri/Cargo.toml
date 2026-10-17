@@ -3,7 +3,7 @@ name = "asset-tracking-program"
 version = "0.1.0"
 edition = "2021"
 authors = ["hankyleisplay"]
-description = "資產追蹤系統 (Asset Tracking Program) - Tauri + Rust 本地儲存與 GitHub 同步"
+description = "資產追蹤系統 (Asset Tracking Program) - Tauri + Rust 本地隱私儲存與安全備份系統"
 
 [dependencies]
 tauri = { version = "2", features = [] }

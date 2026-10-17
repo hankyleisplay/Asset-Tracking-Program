@@ -2,7 +2,7 @@
   "name": "asset-tracking-program",
   "version": "1.0.0",
   "private": true,
-  "description": "資產追蹤系統 (Asset Tracking Program) - Tauri + Rust 本地資料庫與 GitHub 自動發佈",
+  "description": "資產追蹤系統 (Asset Tracking Program) - Tauri + Rust 本地隱私資料庫與完整安全備份系統",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",

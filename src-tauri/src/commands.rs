@@ -1,5 +1,7 @@
-use crate::github_sync::GitHubSyncEngine;
-use crate::models::{AppSettings, Asset, AssetLog, DashboardStats, StockAsset, StockQuote, StockSummary, SyncResult};
+use crate::backup_engine::BackupEngine;
+use crate::models::{
+    AppSettings, Asset, AssetLog, BackupInfo, DashboardStats, StockAsset, StockQuote, StockSummary,
+};
 use crate::storage::{AppState, StorageManager};
 use chrono::Local;
 use std::collections::HashMap;
@@ -98,26 +100,11 @@ pub async fn save_asset(
         (asset, action, details)
     };
 
-    // Auto-sync to GitHub if configured
-    let (auto_sync, settings, all_assets, all_stocks, all_logs) = {
-        let storage = state.lock().map_err(|e| e.to_string())?;
+    // Auto-backup to local snapshot if configured
+    if let Ok(storage) = state.lock() {
         let s = storage.load_settings();
-        (
-            s.auto_sync,
-            s,
-            storage.load_assets(),
-            storage.load_stocks(),
-            storage.load_logs(),
-        )
-    };
-
-    if auto_sync {
-        let res = GitHubSyncEngine::sync_to_github(&settings, &all_assets, &all_stocks, &all_logs).await;
-        if let Ok(storage) = state.lock() {
-            let mut s = storage.load_settings();
-            s.last_sync_time = Some(res.timestamp);
-            s.last_sync_status = Some(res.message);
-            let _ = storage.save_settings(&s);
+        if s.auto_backup {
+            let _ = BackupEngine::create_backup(&storage, "資產異動自動備份");
         }
     }
 
@@ -137,7 +124,7 @@ pub async fn delete_asset(
         operator
     };
 
-    let (auto_sync, settings, all_assets, all_stocks, all_logs) = {
+    {
         let storage = state.lock().map_err(|e| e.to_string())?;
         let mut assets = storage.load_assets();
         let deleted_name = if let Some(pos) = assets.iter().position(|a| a.id == id) {
@@ -161,24 +148,10 @@ pub async fn delete_asset(
         let _ = storage.add_log(log);
 
         let s = storage.load_settings();
-        (
-            s.auto_sync,
-            s,
-            storage.load_assets(),
-            storage.load_stocks(),
-            storage.load_logs(),
-        )
-    };
-
-    if auto_sync {
-        let res = GitHubSyncEngine::sync_to_github(&settings, &all_assets, &all_stocks, &all_logs).await;
-        if let Ok(storage) = state.lock() {
-            let mut s = storage.load_settings();
-            s.last_sync_time = Some(res.timestamp);
-            s.last_sync_status = Some(res.message);
-            let _ = storage.save_settings(&s);
+        if s.auto_backup {
+            let _ = BackupEngine::create_backup(&storage, "刪除資產自動備份");
         }
-    }
+    };
 
     Ok(())
 }
@@ -239,25 +212,11 @@ pub async fn update_asset_status(
     };
 
     // Auto-sync
-    let (auto_sync, settings, all_assets, all_stocks, all_logs) = {
-        let storage = state.lock().map_err(|e| e.to_string())?;
+    // Auto-backup
+    if let Ok(storage) = state.lock() {
         let s = storage.load_settings();
-        (
-            s.auto_sync,
-            s,
-            storage.load_assets(),
-            storage.load_stocks(),
-            storage.load_logs(),
-        )
-    };
-
-    if auto_sync {
-        let res = GitHubSyncEngine::sync_to_github(&settings, &all_assets, &all_stocks, &all_logs).await;
-        if let Ok(storage) = state.lock() {
-            let mut s = storage.load_settings();
-            s.last_sync_time = Some(res.timestamp);
-            s.last_sync_status = Some(res.message);
-            let _ = storage.save_settings(&s);
+        if s.auto_backup {
+            let _ = BackupEngine::create_backup(&storage, "資產狀態變更自動備份");
         }
     }
 
@@ -289,27 +248,40 @@ pub fn save_settings(state: State<AppState>, settings: AppSettings) -> Result<()
 }
 
 #[tauri::command]
-pub async fn sync_to_github_now(state: State<'_, AppState>) -> Result<SyncResult, String> {
-    let (settings, assets, stocks, logs) = {
-        let storage = state.lock().map_err(|e| e.to_string())?;
-        (
-            storage.load_settings(),
-            storage.load_assets(),
-            storage.load_stocks(),
-            storage.load_logs(),
-        )
-    };
+pub fn create_local_backup(
+    state: State<AppState>,
+    note: Option<String>,
+) -> Result<BackupInfo, String> {
+    let storage = state.lock().map_err(|e| e.to_string())?;
+    BackupEngine::create_backup(&storage, note.as_deref().unwrap_or("手動建立備份"))
+}
 
-    let result = GitHubSyncEngine::sync_to_github(&settings, &assets, &stocks, &logs).await;
+#[tauri::command]
+pub fn list_local_backups(state: State<AppState>) -> Result<Vec<BackupInfo>, String> {
+    let storage = state.lock().map_err(|e| e.to_string())?;
+    BackupEngine::list_backups(&storage)
+}
 
-    if let Ok(storage) = state.lock() {
-        let mut s = storage.load_settings();
-        s.last_sync_time = Some(result.timestamp.clone());
-        s.last_sync_status = Some(result.message.clone());
-        let _ = storage.save_settings(&s);
-    }
+#[tauri::command]
+pub fn restore_local_backup(
+    state: State<AppState>,
+    source: String,
+    operator: Option<String>,
+) -> Result<String, String> {
+    let storage = state.lock().map_err(|e| e.to_string())?;
+    BackupEngine::restore_backup(&storage, &source, operator.as_deref().unwrap_or("使用者"))
+}
 
-    Ok(result)
+#[tauri::command]
+pub fn delete_local_backup(state: State<AppState>, filename: String) -> Result<(), String> {
+    let storage = state.lock().map_err(|e| e.to_string())?;
+    BackupEngine::delete_backup(&storage, &filename)
+}
+
+#[tauri::command]
+pub fn export_full_backup_json(state: State<AppState>) -> Result<String, String> {
+    let storage = state.lock().map_err(|e| e.to_string())?;
+    BackupEngine::export_full_backup_json(&storage)
 }
 
 #[tauri::command]
@@ -393,25 +365,11 @@ pub async fn save_stock(
         (stock, act, det)
     };
 
-    let (auto_sync, settings, all_assets, all_stocks, all_logs) = {
-        let storage = state.lock().map_err(|e| e.to_string())?;
+    // Auto-backup if configured
+    if let Ok(storage) = state.lock() {
         let s = storage.load_settings();
-        (
-            s.auto_sync,
-            s,
-            storage.load_assets(),
-            storage.load_stocks(),
-            storage.load_logs(),
-        )
-    };
-
-    if auto_sync {
-        let res = GitHubSyncEngine::sync_to_github(&settings, &all_assets, &all_stocks, &all_logs).await;
-        if let Ok(storage) = state.lock() {
-            let mut s = storage.load_settings();
-            s.last_sync_time = Some(res.timestamp);
-            s.last_sync_status = Some(res.message);
-            let _ = storage.save_settings(&s);
+        if s.auto_backup {
+            let _ = BackupEngine::create_backup(&storage, "股票持股異動自動備份");
         }
     }
 
@@ -431,7 +389,7 @@ pub async fn delete_stock(
         operator
     };
 
-    let (auto_sync, settings, all_assets, all_stocks, all_logs) = {
+    {
         let storage = state.lock().map_err(|e| e.to_string())?;
         let mut stocks = storage.load_stocks();
         let deleted_name = if let Some(pos) = stocks.iter().position(|s| s.id == id) {
@@ -455,24 +413,10 @@ pub async fn delete_stock(
         let _ = storage.add_log(log);
 
         let s = storage.load_settings();
-        (
-            s.auto_sync,
-            s,
-            storage.load_assets(),
-            storage.load_stocks(),
-            storage.load_logs(),
-        )
-    };
-
-    if auto_sync {
-        let res = GitHubSyncEngine::sync_to_github(&settings, &all_assets, &all_stocks, &all_logs).await;
-        if let Ok(storage) = state.lock() {
-            let mut s = storage.load_settings();
-            s.last_sync_time = Some(res.timestamp);
-            s.last_sync_status = Some(res.message);
-            let _ = storage.save_settings(&s);
+        if s.auto_backup {
+            let _ = BackupEngine::create_backup(&storage, "刪除/賣出股票自動備份");
         }
-    }
+    };
 
     Ok(())
 }
@@ -522,25 +466,11 @@ pub async fn batch_update_stock_prices(
         stocks
     };
 
-    let (auto_sync, settings, all_assets, all_stocks, all_logs) = {
-        let storage = state.lock().map_err(|e| e.to_string())?;
+    // Auto-backup if configured
+    if let Ok(storage) = state.lock() {
         let s = storage.load_settings();
-        (
-            s.auto_sync,
-            s,
-            storage.load_assets(),
-            storage.load_stocks(),
-            storage.load_logs(),
-        )
-    };
-
-    if auto_sync {
-        let res = GitHubSyncEngine::sync_to_github(&settings, &all_assets, &all_stocks, &all_logs).await;
-        if let Ok(storage) = state.lock() {
-            let mut s = storage.load_settings();
-            s.last_sync_time = Some(res.timestamp);
-            s.last_sync_status = Some(res.message);
-            let _ = storage.save_settings(&s);
+        if s.auto_backup {
+            let _ = BackupEngine::create_backup(&storage, "更新股價自動備份");
         }
     }
 
@@ -962,26 +892,11 @@ pub async fn auto_update_all_live_quotes(
         let _ = storage.add_log(log);
     }
 
-    // Auto-sync if configured
-    let (auto_sync, settings, all_assets, all_stocks, all_logs) = {
-        let storage = state.lock().map_err(|e| e.to_string())?;
+    // Auto-backup if configured
+    if let Ok(storage) = state.lock() {
         let s = storage.load_settings();
-        (
-            s.auto_sync,
-            s,
-            storage.load_assets(),
-            storage.load_stocks(),
-            storage.load_logs(),
-        )
-    };
-
-    if auto_sync {
-        let res = GitHubSyncEngine::sync_to_github(&settings, &all_assets, &all_stocks, &all_logs).await;
-        if let Ok(storage) = state.lock() {
-            let mut s = storage.load_settings();
-            s.last_sync_time = Some(res.timestamp);
-            s.last_sync_status = Some(res.message);
-            let _ = storage.save_settings(&s);
+        if s.auto_backup {
+            let _ = BackupEngine::create_backup(&storage, "自動更新即時行情備份");
         }
     }
 
